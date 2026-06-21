@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Crypto Rank Tracker</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --gold: #e3b341;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --accent: #1f6feb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; min-height: 100vh; }
+
+  /* ---- Header ---- */
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; font-weight: 700; color: var(--gold); display: flex; align-items: center; gap: 8px; }
+  .status-bar { flex: 1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .status-chip { font-size: 12px; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 10px; white-space: nowrap; }
+  .status-chip.ok { border-color: var(--green); color: var(--green); }
+  .status-chip.warn { border-color: var(--gold); color: var(--gold); }
+  .status-chip.err { border-color: var(--red); color: var(--red); }
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; transition: opacity 0.15s; white-space: nowrap; }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+  .btn.danger { background: #3d1f1f; border: 1px solid var(--red); color: var(--red); }
+
+  /* ---- Tabs ---- */
+  .tab-nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; display: flex; gap: 0; overflow-x: auto; }
+  .tab-btn { background: none; border: none; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; font-size: 14px; font-weight: 500; padding: 12px 16px; white-space: nowrap; transition: all 0.15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  /* ---- Sub-tabs ---- */
+  .subtab-nav { display: flex; gap: 6px; flex-wrap: wrap; padding: 14px 20px 0; }
+  .subtab-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; padding: 5px 12px; transition: all 0.15s; }
+  .subtab-btn:hover { color: var(--text); border-color: var(--blue); }
+  .subtab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ---- Content ---- */
+  .pane { display: none; padding: 16px 20px; }
+  .pane.active { display: block; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .section-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .section-note { font-size: 12px; color: var(--muted); }
+
+  /* ---- Table ---- */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { background: var(--surface2); color: var(--muted); font-weight: 600; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+  thead th:hover { color: var(--text); }
+  thead th .sort-arrow { font-size: 10px; margin-left: 4px; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  td { padding: 9px 12px; vertical-align: middle; }
+  .coin-cell { display: flex; align-items: center; gap: 8px; }
+  .coin-img { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; }
+  .coin-name { font-weight: 600; color: var(--text); }
+  .coin-sym { color: var(--muted); font-size: 11px; margin-top: 1px; }
+  .rank-badge { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; font-weight: 700; font-size: 12px; min-width: 36px; text-align: center; }
+  .change-up { color: var(--green); font-weight: 700; }
+  .change-down { color: var(--red); font-weight: 700; }
+  .change-none { color: var(--muted); }
+  .links { display: flex; gap: 6px; }
+  .link-chip { display: inline-flex; align-items: center; gap: 3px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--blue); font-size: 11px; font-weight: 600; padding: 3px 8px; text-decoration: none; white-space: nowrap; transition: border-color 0.15s; }
+  .link-chip:hover { border-color: var(--blue); }
+  .date-chip { font-size: 11px; color: var(--purple); background: #1f1535; border: 1px solid #3d2c6e; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+  .empty-state h3 { color: var(--text); margin-bottom: 6px; }
+
+  /* ---- Spinner ---- */
+  .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; gap: 16px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-msg { color: var(--muted); font-size: 13px; }
+  .progress-bar-wrap { width: 220px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; height: 6px; overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--blue); transition: width 0.4s; }
+
+  /* ---- Toast ---- */
+  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; font-size: 13px; color: var(--text); z-index: 9999; display: none; max-width: 320px; box-shadow: 0 8px 24px #0008; }
+  #toast.show { display: block; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform:none; } }
+
+  /* ---- Info banner ---- */
+  .info-banner { background: #0d1f3a; border: 1px solid #1d3d6e; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #8ab4f8; margin-bottom: 14px; display: flex; align-items: flex-start; gap: 8px; }
+
+  /* ---- Movers split ---- */
+  .movers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .movers-grid { grid-template-columns: 1fr; } }
+  .movers-panel { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .movers-panel-header { padding: 10px 14px; font-size: 13px; font-weight: 700; border-bottom: 1px solid var(--border); }
+  .movers-panel-header.gainers { background: #0d2318; color: var(--green); }
+  .movers-panel-header.losers { background: #2a0e0e; color: var(--red); }
+
+  /* ---- Breakout tier badge ---- */
+  .tier-badge { display: inline-block; background: #1a1000; border: 1px solid var(--gold); color: var(--gold); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
+
+  /* ---- Storage info ---- */
+  .storage-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; width: 120px; display: inline-block; vertical-align: middle; margin-left: 6px; }
+  .storage-bar-fill { height: 100%; background: var(--blue); transition: width 0.3s; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <h1>📊 Crypto Rank Tracker</h1>
+  <div class="status-bar">
+    <span class="status-chip" id="dataStatus">No data loaded</span>
+    <span class="status-chip" id="snapshotStatus">0 snapshots stored</span>
+    <span class="status-chip" id="storageStatus">localStorage: 0 KB</span>
+  </div>
+  <button class="btn secondary danger" id="clearSnapshots" title="Delete all stored historical snapshots from browser">🗑 Clear History</button>
+  <button class="btn" id="refreshBtn" onclick="fetchAndSave()">⟳ Fetch Live Data</button>
+</header>
+
+<!-- MAIN TABS -->
+<nav class="tab-nav">
+  <button class="tab-btn active" data-tab="breakouts">🏆 Rank Breakouts</button>
+  <button class="tab-btn" data-tab="movers">📈 Biggest Movers</button>
+  <button class="tab-btn" data-tab="browser">🔍 Browse Top 1000</button>
+</nav>
+
+<!-- ================================================================
+     TAB 1 — RANK BREAKOUTS
+================================================================ -->
+<div class="pane active" id="pane-breakouts">
+  <div class="subtab-nav" id="breakout-subtabs">
+    <button class="subtab-btn active" data-tier="100">Top 100</button>
+    <button class="subtab-btn" data-tier="200">Top 200</button>
+    <button class="subtab-btn" data-tier="300">Top 300</button>
+    <button class="subtab-btn" data-tier="400">Top 400</button>
+    <button class="subtab-btn" data-tier="500">Top 500</button>
+    <button class="subtab-btn" data-tier="600">Top 600</button>
+    <button class="subtab-btn" data-tier="700">Top 700</button>
+    <button class="subtab-btn" data-tier="800">Top 800</button>
+  </div>
+  <div style="height:14px"></div>
+  <div class="info-banner">
+    ℹ️ Shows coins <strong>currently inside a tier</strong> whose earliest recorded rank was <em>outside</em> that tier — i.e., they broke in after you started tracking. Historical accuracy grows as you collect more daily snapshots.
+  </div>
+  <div id="breakout-content">
+    <div class="empty-state"><div class="icon">📡</div><h3>No data yet</h3><p>Click <strong>Fetch Live Data</strong> to load rankings.</p></div>
+  </div>
+</div>
+
+<!-- ================================================================
+     TAB 2 — BIGGEST MOVERS
+================================================================ -->
+<div class="pane" id="pane-movers">
+  <div class="subtab-nav" id="movers-subtabs">
+    <button class="subtab-btn active" data-period="1">1 Day</button>
+    <button class="subtab-btn" data-period="7">7 Days</button>
+    <button class="subtab-btn" data-period="17">17 Days</button>
+    <button class="subtab-btn" data-period="30">30 Days</button>
+    <button class="subtab-btn" data-period="60">60 Days</button>
+    <button class="subtab-btn" data-period="120">120 Days</button>
+    <button class="subtab-btn" data-period="180">180 Days</button>
+    <button class="subtab-btn" data-period="365">365 Days</button>
+  </div>
+  <div style="height:14px"></div>
+  <div id="movers-content">
+    <div class="empty-state"><div class="icon">📡</div><h3>No data yet</h3><p>Click <strong>Fetch Live Data</strong> to load rankings.</p></div>
+  </div>
+</div>
+
+<!-- ================================================================
+     TAB 3 — BROWSE
+================================================================ -->
+<div class="pane" id="pane-browser">
+  <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+    <input id="searchInput" type="text" placeholder="Search by name or symbol…" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:7px 12px;outline:none;min-width:220px;" oninput="renderBrowser()"/>
+    <span style="color:var(--muted);font-size:12px;" id="browserCount"></span>
+  </div>
+  <div id="browser-content">
+    <div class="empty-state"><div class="icon">📡</div><h3>No data yet</h3><p>Click <strong>Fetch Live Data</strong> to load rankings.</p></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const LS_KEY = 'crt_snapshots_v2';
+const MAX_SNAPSHOTS = 400; // keep up to ~400 daily snapshots
+let currentCoins = null;   // latest fetched array
+let allSnapshots = {};     // { "ISO-date-string": [{rank,id,name,symbol,cgUrl,cmcUrl,image},...] }
+let activeTier = 100;
+let activePeriod = 1;
+let activeTab = 'breakouts';
+
+// ============================================================
+// LOCALSTORAGE
+// ============================================================
+function loadSnapshots() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    allSnapshots = raw ? JSON.parse(raw) : {};
+  } catch(e) {
+    allSnapshots = {};
+  }
+}
+
+function saveSnapshot(coins) {
+  const key = new Date().toISOString();
+  // Store minimal data per coin
+  allSnapshots[key] = coins.map(c => ({
+    r: c.rank, i: c.id, n: c.name, s: c.symbol,
+    cg: c.cgUrl, cmc: c.cmcUrl, img: c.image || ''
+  }));
+
+  // Prune: keep only the most recent snapshot per calendar day,
+  // and drop anything older than MAX_SNAPSHOTS days
+  const byDay = {};
+  Object.entries(allSnapshots)
+    .sort(([a],[b]) => a.localeCompare(b))
+    .forEach(([k,v]) => {
+      const day = k.slice(0,10);
+      byDay[day] = [k, v]; // last write per day wins
+    });
+
+  const days = Object.keys(byDay).sort();
+  const keep = days.slice(-MAX_SNAPSHOTS);
+  const pruned = {};
+  keep.forEach(d => { const [k,v] = byDay[d]; pruned[k] = v; });
+  allSnapshots = pruned;
+
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(allSnapshots));
+  } catch(e) {
+    toast('⚠️ localStorage full — old snapshots pruned.', 'warn');
+    // Try removing oldest 30 days
+    const oldest = keep.slice(0, 30);
+    oldest.forEach(d => { const [k] = byDay[d]; delete allSnapshots[k]; });
+    try { localStorage.setItem(LS_KEY, JSON.stringify(allSnapshots)); } catch(_) {}
+  }
+  updateStatusBar();
+}
+
+function clearAllSnapshots() {
+  if (!confirm('Delete ALL stored historical snapshots? This cannot be undone.')) return;
+  localStorage.removeItem(LS_KEY);
+  allSnapshots = {};
+  toast('History cleared.', 'ok');
+  updateStatusBar();
+  renderAll();
+}
+
+// ============================================================
+// STATUS BAR
+// ============================================================
+function updateStatusBar() {
+  const count = Object.keys(allSnapshots).length;
+  document.getElementById('snapshotStatus').textContent = `${count} snapshot${count!==1?'s':''} stored`;
+
+  try {
+    const bytes = (localStorage.getItem(LS_KEY) || '').length * 2;
+    const kb = (bytes/1024).toFixed(1);
+    const maxKb = 5120;
+    const pct = Math.min(100, (bytes/1024/maxKb*100)).toFixed(0);
+    document.getElementById('storageStatus').innerHTML =
+      `localStorage: ${kb} KB &nbsp;<span class="storage-bar"><span class="storage-bar-fill" style="width:${pct}%"></span></span>`;
+  } catch(_) {}
+}
+
+// ============================================================
+// FETCH
+// ============================================================
+async function fetchAndSave() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '⟳ Fetching…';
+  showLoading();
+
+  try {
+    const res = await fetch('/api/top1000');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+
+    currentCoins = json.coins;
+    saveSnapshot(currentCoins);
+    loadSnapshots(); // reload (includes what we just saved)
+
+    const ts = new Date(json.fetchedAt * 1000).toLocaleTimeString();
+    const chip = document.getElementById('dataStatus');
+    chip.textContent = `${currentCoins.length} coins — fetched ${ts}${json.cached?' (cached)':''}`;
+    chip.className = 'status-chip ok';
+    toast(`Loaded ${currentCoins.length} coins. Snapshot saved.`, 'ok');
+    renderAll();
+  } catch(e) {
+    const chip = document.getElementById('dataStatus');
+    chip.textContent = `Error: ${e.message}`;
+    chip.className = 'status-chip err';
+    toast(`Fetch failed: ${e.message}`, 'err');
+    hideLoading();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⟳ Fetch Live Data';
+  }
+}
+
+function showLoading() {
+  const targets = ['breakout-content','movers-content','browser-content'];
+  targets.forEach(id => {
+    document.getElementById(id).innerHTML = `
+      <div class="loading">
+        <div class="spinner"></div>
+        <div class="loading-msg">Fetching top 1000 coins from CoinGecko…</div>
+        <div class="loading-msg" style="font-size:11px">This takes ~8 seconds (4 API pages)</div>
+        <div class="progress-bar-wrap"><div class="progress-bar" style="width:0%" id="pb"></div></div>
+      </div>`;
+  });
+  // Animate progress bar
+  let pct = 0;
+  const interval = setInterval(() => {
+    pct = Math.min(pct + 3, 90);
+    const pbs = document.querySelectorAll('#pb');
+    pbs.forEach(pb => { if(pb) pb.style.width = pct+'%'; });
+    if(pct >= 90) clearInterval(interval);
+  }, 250);
+  window._pbInterval = interval;
+}
+
+function hideLoading() {
+  clearInterval(window._pbInterval);
+}
+
+// ============================================================
+// SNAPSHOT UTILITIES
+// ============================================================
+function snapshotDates() {
+  return Object.keys(allSnapshots).sort();
+}
+
+function findClosestSnapshot(targetMs) {
+  const dates = snapshotDates();
+  if (!dates.length) return null;
+  let best = null, bestDiff = Infinity;
+  dates.forEach(d => {
+    const diff = Math.abs(new Date(d).getTime() - targetMs);
+    if (diff < bestDiff) { bestDiff = diff; best = d; }
+  });
+  return best;
+}
+
+function expandSnapshot(key) {
+  const raw = allSnapshots[key] || [];
+  return raw.map(c => ({
+    rank: c.r, id: c.i, name: c.n, symbol: c.s,
+    cgUrl: c.cg, cmcUrl: c.cmc, image: c.img || ''
+  }));
+}
+
+function snapshotById(snapshotKey) {
+  const coins = expandSnapshot(snapshotKey);
+  const map = {};
+  coins.forEach(c => { map[c.id] = c; });
+  return map;
+}
+
+// ============================================================
+// RENDER — HELPERS
+// ============================================================
+function coinCell(c) {
+  const img = c.image || c.img || '';
+  return `
+    <div class="coin-cell">
+      ${img ? `<img class="coin-img" src="${img}" alt="" onerror="this.style.display='none'"/>` : ''}
+      <div>
+        <div class="coin-name">${esc(c.name)}</div>
+        <div class="coin-sym">${esc(c.symbol)}</div>
+      </div>
+    </div>`;
+}
+
+function linkCell(c) {
+  return `<div class="links">
+    <a class="link-chip" href="${c.cgUrl||c.cg||'#'}" target="_blank" rel="noopener">CG ↗</a>
+    <a class="link-chip" href="${c.cmcUrl||c.cmc||'#'}" target="_blank" rel="noopener">CMC ↗</a>
+  </div>`;
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function rankBadge(r) { return `<span class="rank-badge">#${r}</span>`; }
+
+function changeCell(delta) {
+  if (delta === null || delta === undefined) return '<span class="change-none">—</span>';
+  if (delta > 0) return `<span class="change-up">▲ ${delta}</span>`;
+  if (delta < 0) return `<span class="change-down">▼ ${Math.abs(delta)}</span>`;
+  return '<span class="change-none">–</span>';
+}
+
+// ============================================================
+// RENDER — BREAKOUTS
+// ============================================================
+function renderBreakouts() {
+  const tier = activeTier;
+  const dates = snapshotDates();
+
+  if (!currentCoins || !currentCoins.length) {
+    document.getElementById('breakout-content').innerHTML =
+      `<div class="empty-state"><div class="icon">📡</div><h3>No data yet</h3><p>Click <strong>Fetch Live Data</strong> to load rankings.</p></div>`;
+    return;
+  }
+
+  // Coins currently inside the tier
+  const inTier = currentCoins.filter(c => c.rank <= tier);
+
+  if (dates.length < 2) {
+    document.getElementById('breakout-content').innerHTML =
+      `<div class="empty-state"><div class="icon">🕐</div><h3>Need more history</h3>
+       <p>Only ${dates.length} snapshot${dates.length!==1?'s':''} stored. Come back tomorrow for breakout detection. Historical rank changes are detected by comparing across multiple days.</p></div>`;
+    return;
+  }
+
+  // For each coin in tier now, find earliest snapshot and check if it was outside
+  const oldestKey = dates[0];
+  const oldestMap = snapshotById(oldestKey);
+
+  // Build a per-coin history of when they first entered this tier
+  // We scan all snapshots in order
+  const firstEntry = {}; // id -> earliest key where rank <= tier
+  const wasOutside = {}; // id -> true if there's any snapshot where rank > tier or not present
+
+  dates.forEach(key => {
+    const map = snapshotById(key);
+    inTier.forEach(c => {
+      const h = map[c.id];
+      if (h && h.rank <= tier) {
+        if (!firstEntry[c.id]) firstEntry[c.id] = key;
+      } else {
+        // Not in tier (either missing or rank > tier)
+        wasOutside[c.id] = true;
+        // Reset firstEntry so we get the *true* first post-outside entry
+        if (firstEntry[c.id]) {
+          // Check if there's an "outside" after this entry — means it might have re-entered
+          // Simple approach: mark as re-entry candidate
+        }
+      }
+    });
+  });
+
+  // More accurate: for each coin, walk timeline and detect transitions
+  const breakouts = [];
+  inTier.forEach(c => {
+    // Walk history
+    let outsideSeen = false;
+    let entryKey = null;
+    let entryRank = null;
+    let prevRank = null;
+
+    dates.forEach(key => {
+      const map = snapshotById(key);
+      const h = map[c.id];
+      if (!h) {
+        // Not tracked yet — counts as outside
+        outsideSeen = true;
+        entryKey = null;
+      } else if (h.rank > tier) {
+        outsideSeen = true;
+        entryKey = null;
+        prevRank = h.rank;
+      } else {
+        // Inside tier
+        if (outsideSeen && !entryKey) {
+          entryKey = key;
+          entryRank = prevRank;
+        }
+      }
+    });
+
+    if (outsideSeen && entryKey) {
+      breakouts.push({
+        ...c,
+        entryKey,
+        entryDate: entryKey.slice(0,10),
+        prevRank: entryRank,
+      });
+    }
+  });
+
+  // Sort by entry date descending (most recent breakouts first)
+  breakouts.sort((a,b) => b.entryKey.localeCompare(a.entryKey));
+
+  if (!breakouts.length) {
+    document.getElementById('breakout-content').innerHTML =
+      `<div class="empty-state"><div class="icon">✅</div><h3>No new breakouts</h3>
+       <p>All coins currently in the top ${tier} were already there in the earliest snapshot (${oldestKey.slice(0,10)}).<br>Keep collecting snapshots daily to detect future breakouts.</p></div>`;
+    return;
+  }
+
+  const rows = breakouts.map(c => `
+    <tr>
+      <td>${rankBadge(c.rank)}</td>
+      <td>${coinCell(c)}</td>
+      <td><span class="tier-badge">TOP ${tier}</span></td>
+      <td><span class="date-chip">${c.entryDate}</span></td>
+      <td>${c.prevRank ? `<span class="change-down">#${c.prevRank}</span>` : '<span class="change-none">Not tracked</span>'}</td>
+      <td>${changeCell(c.prevRank ? c.prevRank - c.rank : null)}</td>
+      <td>${linkCell(c)}</td>
+    </tr>`).join('');
+
+  document.getElementById('breakout-content').innerHTML = `
+    <div class="section-header">
+      <div>
+        <span class="section-title">Coins that broke into Top ${tier} for the first time</span>
+        <span class="section-note" style="margin-left:10px">Tracking since ${oldestKey.slice(0,10)}</span>
+      </div>
+      <span class="section-note">${breakouts.length} breakout${breakouts.length!==1?'s':''} detected</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Rank Now</th><th>Coin</th><th>Tier Entered</th><th>Entry Date</th><th>Rank Before</th><th>Jump</th><th>Links</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ============================================================
+// RENDER — MOVERS
+// ============================================================
+function renderMovers() {
+  const period = activePeriod;
+
+  if (!currentCoins || !currentCoins.length) {
+    document.getElementById('movers-content').innerHTML =
+      `<div class="empty-state"><div class="icon">📡</div><h3>No data yet</h3><p>Click <strong>Fetch Live Data</strong> to load rankings.</p></div>`;
+    return;
+  }
+
+  const nowMs = Date.now();
+  const targetMs = nowMs - period * 24 * 60 * 60 * 1000;
+  const histKey = findClosestSnapshot(targetMs);
+  const dates = snapshotDates();
+
+  // The most recent snapshot (should be latest fetch)
+  const latestKey = dates[dates.length - 1];
+  const latestMs = histKey ? new Date(histKey).getTime() : null;
+  const diffDays = histKey ? Math.round((nowMs - latestMs) / 86400000) : null;
+
+  if (!histKey || histKey === latestKey) {
+    document.getElementById('movers-content').innerHTML =
+      `<div class="empty-state"><div class="icon">🕐</div><h3>Not enough history for ${period} day${period>1?'s':''}</h3>
+       <p>You need snapshots from ~${period} days ago. Currently only have data from ${dates.length} session${dates.length!==1?'s':''}.<br>Keep visiting daily to build history.</p></div>`;
+    return;
+  }
+
+  const histMap = snapshotById(histKey);
+  const changes = [];
+
+  currentCoins.forEach(c => {
+    const h = histMap[c.id];
+    if (!h) return;
+    const delta = h.rank - c.rank; // positive = moved up (rank number decreased)
+    changes.push({ ...c, oldRank: h.rank, delta });
+  });
+
+  const gainers = [...changes].sort((a,b) => b.delta - a.delta).slice(0, 50);
+  const losers  = [...changes].sort((a,b) => a.delta - b.delta).slice(0, 50);
+
+  function moverTable(list, dir) {
+    if (!list.length) return '<p style="padding:16px;color:var(--muted)">No data</p>';
+    return `<table>
+      <thead><tr>
+        <th>Rank Now</th><th>Coin</th><th>Rank ${diffDays}d ago</th><th>Change</th><th>Links</th>
+      </tr></thead>
+      <tbody>${list.map(c=>`<tr>
+        <td>${rankBadge(c.rank)}</td>
+        <td>${coinCell(c)}</td>
+        <td>${rankBadge(c.oldRank)}</td>
+        <td>${changeCell(c.delta)}</td>
+        <td>${linkCell(c)}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  document.getElementById('movers-content').innerHTML = `
+    <div class="section-header">
+      <span class="section-title">Rank changes over ~${period} day${period>1?'s':''}</span>
+      <span class="section-note">Compared to snapshot from ${histKey.slice(0,10)} (${diffDays}d ago)</span>
+    </div>
+    <div class="movers-grid">
+      <div class="movers-panel">
+        <div class="movers-panel-header gainers">🚀 Biggest Rank Climbers (top 50)</div>
+        <div class="table-wrap" style="border:none;border-radius:0">${moverTable(gainers,'up')}</div>
+      </div>
+      <div class="movers-panel">
+        <div class="movers-panel-header losers">📉 Biggest Rank Drops (top 50)</div>
+        <div class="table-wrap" style="border:none;border-radius:0">${moverTable(losers,'down')}</div>
+      </div>
+    </div>`;
+}
+
+// ============================================================
+// RENDER — BROWSER
+// ============================================================
+function renderBrowser() {
+  const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+
+  if (!currentCoins || !currentCoins.length) {
+    document.getElementById('browser-content').innerHTML =
+      `<div class="empty-state"><div class="icon">📡</div><h3>No data yet</h3><p>Click <strong>Fetch Live Data</strong> to load rankings.</p></div>`;
+    return;
+  }
+
+  const filtered = q
+    ? currentCoins.filter(c => c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q))
+    : currentCoins;
+
+  document.getElementById('browserCount').textContent = `${filtered.length} of ${currentCoins.length} coins`;
+
+  const PAGE = 100;
+  const show = filtered.slice(0, PAGE);
+
+  const rows = show.map(c => `
+    <tr>
+      <td>${rankBadge(c.rank)}</td>
+      <td>${coinCell(c)}</td>
+      <td style="color:var(--text);font-variant-numeric:tabular-nums">${c.price != null ? '$' + c.price.toLocaleString(undefined,{maximumFractionDigits:6}) : '—'}</td>
+      <td>${c.change24h != null ? `<span class="${c.change24h>=0?'change-up':'change-down'}">${c.change24h>=0?'▲':'▼'} ${Math.abs(c.change24h).toFixed(2)}%</span>` : '—'}</td>
+      <td style="color:var(--muted)">${c.marketCap != null ? '$' + formatLarge(c.marketCap) : '—'}</td>
+      <td>${linkCell(c)}</td>
+    </tr>`).join('');
+
+  document.getElementById('browser-content').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Rank</th><th>Coin</th><th>Price</th><th>24h %</th><th>Market Cap</th><th>Links</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${filtered.length > PAGE ? `<p style="color:var(--muted);padding:12px 0;font-size:12px">Showing first ${PAGE} results. Use search to filter.</p>` : ''}`;
+}
+
+function formatLarge(n) {
+  if (n >= 1e12) return (n/1e12).toFixed(2) + 'T';
+  if (n >= 1e9)  return (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6)  return (n/1e6).toFixed(2) + 'M';
+  return n.toLocaleString();
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll() {
+  hideLoading();
+  if (activeTab === 'breakouts') renderBreakouts();
+  else if (activeTab === 'movers') renderMovers();
+  else if (activeTab === 'browser') renderBrowser();
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = type==='ok' ? 'var(--green)' : type==='err' ? 'var(--red)' : 'var(--gold)';
+  el.className = 'show';
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => { el.className=''; }, 4000);
+}
+
+// ============================================================
+// TAB WIRING
+// ============================================================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    document.getElementById(`pane-${activeTab}`).classList.add('active');
+    renderAll();
+  });
+});
+
+document.querySelectorAll('#breakout-subtabs .subtab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#breakout-subtabs .subtab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTier = parseInt(btn.dataset.tier);
+    renderBreakouts();
+  });
+});
+
+document.querySelectorAll('#movers-subtabs .subtab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#movers-subtabs .subtab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activePeriod = parseInt(btn.dataset.period);
+    renderMovers();
+  });
+});
+
+document.getElementById('clearSnapshots').addEventListener('click', clearAllSnapshots);
+
+// ============================================================
+// INIT
+// ============================================================
+loadSnapshots();
+updateStatusBar();
+
+// If we have at least one snapshot, show data immediately
+const dates = snapshotDates();
+if (dates.length) {
+  const latestKey = dates[dates.length - 1];
+  const latestCoins = expandSnapshot(latestKey);
+  // Convert minimal format back to full format for display
+  currentCoins = latestCoins.map(c => ({
+    rank: c.rank, id: c.id, name: c.name, symbol: c.symbol,
+    cgUrl: c.cgUrl, cmcUrl: c.cmcUrl, image: c.image,
+    price: null, change24h: null, marketCap: null
+  }));
+  const chip = document.getElementById('dataStatus');
+  chip.textContent = `${currentCoins.length} coins from ${latestKey.slice(0,10)} (cached — click Fetch to refresh)`;
+  chip.className = 'status-chip warn';
+  renderAll();
+}
+</script>
+</body>
+</html>
