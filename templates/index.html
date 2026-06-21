@@ -6,18 +6,18 @@
 <title>Crypto Rank Tracker</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --surface2: #21262d;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --green: #3fb950;
-    --red: #f85149;
-    --gold: #e3b341;
-    --blue: #58a6ff;
-    --purple: #bc8cff;
-    --accent: #1f6feb;
+    --bg: #ffffff;
+    --surface: #f6f8fa;
+    --surface2: #eaeef2;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --muted: #656d76;
+    --green: #1a7f37;
+    --red: #cf222e;
+    --gold: #9a6700;
+    --blue: #0969da;
+    --purple: #8250df;
+    --accent: #0969da;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; min-height: 100vh; }
@@ -76,7 +76,7 @@
   .links { display: flex; gap: 6px; }
   .link-chip { display: inline-flex; align-items: center; gap: 3px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--blue); font-size: 11px; font-weight: 600; padding: 3px 8px; text-decoration: none; white-space: nowrap; transition: border-color 0.15s; }
   .link-chip:hover { border-color: var(--blue); }
-  .date-chip { font-size: 11px; color: var(--purple); background: #1f1535; border: 1px solid #3d2c6e; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+  .date-chip { font-size: 11px; color: var(--purple); background: #f3effe; border: 1px solid #d8b4fe; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
   .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
   .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
   .empty-state h3 { color: var(--text); margin-bottom: 6px; }
@@ -90,23 +90,23 @@
   .progress-bar { height: 100%; background: var(--blue); transition: width 0.4s; }
 
   /* ---- Toast ---- */
-  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; font-size: 13px; color: var(--text); z-index: 9999; display: none; max-width: 320px; box-shadow: 0 8px 24px #0008; }
+  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; font-size: 13px; color: var(--text); z-index: 9999; display: none; max-width: 320px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
   #toast.show { display: block; animation: fadeIn 0.3s ease; }
   @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform:none; } }
 
   /* ---- Info banner ---- */
-  .info-banner { background: #0d1f3a; border: 1px solid #1d3d6e; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #8ab4f8; margin-bottom: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .info-banner { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #1d4ed8; margin-bottom: 14px; display: flex; align-items: flex-start; gap: 8px; }
 
   /* ---- Movers split ---- */
   .movers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 760px) { .movers-grid { grid-template-columns: 1fr; } }
   .movers-panel { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .movers-panel-header { padding: 10px 14px; font-size: 13px; font-weight: 700; border-bottom: 1px solid var(--border); }
-  .movers-panel-header.gainers { background: #0d2318; color: var(--green); }
-  .movers-panel-header.losers { background: #2a0e0e; color: var(--red); }
+  .movers-panel-header.gainers { background: #dcfce7; color: var(--green); }
+  .movers-panel-header.losers { background: #fee2e2; color: var(--red); }
 
   /* ---- Breakout tier badge ---- */
-  .tier-badge { display: inline-block; background: #1a1000; border: 1px solid var(--gold); color: var(--gold); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
+  .tier-badge { display: inline-block; background: #fef9c3; border: 1px solid var(--gold); color: var(--gold); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
 
   /* ---- Storage info ---- */
   .storage-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; width: 120px; display: inline-block; vertical-align: middle; margin-left: 6px; }
