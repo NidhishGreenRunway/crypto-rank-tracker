@@ -121,9 +121,8 @@
   <div class="status-bar">
     <span class="status-chip" id="dataStatus">No data loaded</span>
     <span class="status-chip" id="snapshotStatus">0 snapshots stored</span>
-    <span class="status-chip" id="storageStatus">localStorage: 0 KB</span>
   </div>
-  <button class="btn secondary danger" id="clearSnapshots" title="Delete all stored historical snapshots from browser">🗑 Clear History</button>
+  <button class="btn secondary danger" id="clearSnapshots" title="Delete all stored historical snapshots from database">🗑 Clear History</button>
   <button class="btn" id="refreshBtn" onclick="fetchAndSave()">⟳ Fetch Live Data</button>
 </header>
 
@@ -197,69 +196,40 @@
 // ============================================================
 // STATE
 // ============================================================
-const LS_KEY = 'crt_snapshots_v2';
-const MAX_SNAPSHOTS = 400; // keep up to ~400 daily snapshots
 let currentCoins = null;   // latest fetched array
-let allSnapshots = {};     // { "ISO-date-string": [{rank,id,name,symbol,cgUrl,cmcUrl,image},...] }
+let allSnapshots = {};     // { "ISO-timestamp": [{r,i,n,s,cg,cmc,img},...] }
 let activeTier = 100;
 let activePeriod = 1;
 let activeTab = 'breakouts';
 
 // ============================================================
-// LOCALSTORAGE
+// API — SNAPSHOTS
 // ============================================================
-function loadSnapshots() {
+async function loadSnapshots() {
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    allSnapshots = raw ? JSON.parse(raw) : {};
+    const res = await fetch('/api/snapshots');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    allSnapshots = json.snapshots || {};
+    updateStatusBar();
   } catch(e) {
+    console.warn('Could not load snapshots:', e.message);
     allSnapshots = {};
   }
 }
 
-function saveSnapshot(coins) {
-  const key = new Date().toISOString();
-  // Store minimal data per coin
-  allSnapshots[key] = coins.map(c => ({
-    r: c.rank, i: c.id, n: c.name, s: c.symbol,
-    cg: c.cgUrl, cmc: c.cmcUrl, img: c.image || ''
-  }));
-
-  // Prune: keep only the most recent snapshot per calendar day,
-  // and drop anything older than MAX_SNAPSHOTS days
-  const byDay = {};
-  Object.entries(allSnapshots)
-    .sort(([a],[b]) => a.localeCompare(b))
-    .forEach(([k,v]) => {
-      const day = k.slice(0,10);
-      byDay[day] = [k, v]; // last write per day wins
-    });
-
-  const days = Object.keys(byDay).sort();
-  const keep = days.slice(-MAX_SNAPSHOTS);
-  const pruned = {};
-  keep.forEach(d => { const [k,v] = byDay[d]; pruned[k] = v; });
-  allSnapshots = pruned;
-
+async function clearAllSnapshots() {
+  if (!confirm('Delete ALL stored historical snapshots from the database? This cannot be undone.')) return;
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(allSnapshots));
+    const res = await fetch('/api/snapshots/clear', { method: 'POST' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    allSnapshots = {};
+    toast('History cleared.', 'ok');
+    updateStatusBar();
+    renderAll();
   } catch(e) {
-    toast('⚠️ localStorage full — old snapshots pruned.', 'warn');
-    // Try removing oldest 30 days
-    const oldest = keep.slice(0, 30);
-    oldest.forEach(d => { const [k] = byDay[d]; delete allSnapshots[k]; });
-    try { localStorage.setItem(LS_KEY, JSON.stringify(allSnapshots)); } catch(_) {}
+    toast(`Clear failed: ${e.message}`, 'err');
   }
-  updateStatusBar();
-}
-
-function clearAllSnapshots() {
-  if (!confirm('Delete ALL stored historical snapshots? This cannot be undone.')) return;
-  localStorage.removeItem(LS_KEY);
-  allSnapshots = {};
-  toast('History cleared.', 'ok');
-  updateStatusBar();
-  renderAll();
 }
 
 // ============================================================
@@ -267,16 +237,7 @@ function clearAllSnapshots() {
 // ============================================================
 function updateStatusBar() {
   const count = Object.keys(allSnapshots).length;
-  document.getElementById('snapshotStatus').textContent = `${count} snapshot${count!==1?'s':''} stored`;
-
-  try {
-    const bytes = (localStorage.getItem(LS_KEY) || '').length * 2;
-    const kb = (bytes/1024).toFixed(1);
-    const maxKb = 5120;
-    const pct = Math.min(100, (bytes/1024/maxKb*100)).toFixed(0);
-    document.getElementById('storageStatus').innerHTML =
-      `localStorage: ${kb} KB &nbsp;<span class="storage-bar"><span class="storage-bar-fill" style="width:${pct}%"></span></span>`;
-  } catch(_) {}
+  document.getElementById('snapshotStatus').textContent = `${count} snapshot${count!==1?'s':''} in DB`;
 }
 
 // ============================================================
@@ -295,14 +256,14 @@ async function fetchAndSave() {
     if (json.error) throw new Error(json.error);
 
     currentCoins = json.coins;
-    saveSnapshot(currentCoins);
-    loadSnapshots(); // reload (includes what we just saved)
+    // Snapshot is auto-saved server-side; reload from DB to get updated list
+    await loadSnapshots();
 
     const ts = new Date(json.fetchedAt * 1000).toLocaleTimeString();
     const chip = document.getElementById('dataStatus');
     chip.textContent = `${currentCoins.length} coins — fetched ${ts}${json.cached?' (cached)':''}`;
     chip.className = 'status-chip ok';
-    toast(`Loaded ${currentCoins.length} coins. Snapshot saved.`, 'ok');
+    toast(`Loaded ${currentCoins.length} coins. Snapshot saved to DB.`, 'ok');
     renderAll();
   } catch(e) {
     const chip = document.getElementById('dataStatus');
@@ -720,25 +681,23 @@ document.getElementById('clearSnapshots').addEventListener('click', clearAllSnap
 // ============================================================
 // INIT
 // ============================================================
-loadSnapshots();
-updateStatusBar();
-
-// If we have at least one snapshot, show data immediately
-const dates = snapshotDates();
-if (dates.length) {
-  const latestKey = dates[dates.length - 1];
-  const latestCoins = expandSnapshot(latestKey);
-  // Convert minimal format back to full format for display
-  currentCoins = latestCoins.map(c => ({
-    rank: c.rank, id: c.id, name: c.name, symbol: c.symbol,
-    cgUrl: c.cgUrl, cmcUrl: c.cmcUrl, image: c.image,
-    price: null, change24h: null, marketCap: null
-  }));
-  const chip = document.getElementById('dataStatus');
-  chip.textContent = `${currentCoins.length} coins from ${latestKey.slice(0,10)} (cached — click Fetch to refresh)`;
-  chip.className = 'status-chip warn';
-  renderAll();
-}
+(async () => {
+  await loadSnapshots();
+  const dates = snapshotDates();
+  if (dates.length) {
+    const latestKey = dates[dates.length - 1];
+    const latestCoins = expandSnapshot(latestKey);
+    currentCoins = latestCoins.map(c => ({
+      rank: c.rank, id: c.id, name: c.name, symbol: c.symbol,
+      cgUrl: c.cgUrl, cmcUrl: c.cmcUrl, image: c.image,
+      price: null, change24h: null, marketCap: null
+    }));
+    const chip = document.getElementById('dataStatus');
+    chip.textContent = `${currentCoins.length} coins from ${latestKey.slice(0,10)} (cached — click Fetch to refresh)`;
+    chip.className = 'status-chip warn';
+    renderAll();
+  }
+})();
 </script>
 </body>
 </html>
