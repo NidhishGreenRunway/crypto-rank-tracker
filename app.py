@@ -13,6 +13,9 @@ import requests
 import psycopg2
 from psycopg2.extras import Json
 from flask import Flask, jsonify, render_template
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import pytz
 
 app = Flask(__name__)
 
@@ -243,9 +246,44 @@ def clear_cache():
 
 
 # ---------------------------------------------------------------------------
+# Scheduled daily snapshot — runs at 06:00 CET on Railway
+# ---------------------------------------------------------------------------
+def scheduled_snapshot():
+    print(f"[scheduler] Running daily snapshot at {datetime.datetime.now(datetime.timezone.utc).isoformat()}")
+    try:
+        coins = fetch_top1000()
+    except RuntimeError as exc:
+        print(f"[scheduler] Fetch failed: {exc}")
+        return
+
+    fetched_at = datetime.datetime.now(datetime.timezone.utc)
+    compact = _compact(coins)
+
+    if _db_url():
+        _save_snapshot_db(fetched_at, compact)
+        print(f"[scheduler] Saved {len(coins)} coins to DB.")
+    else:
+        with _mem_lock:
+            _mem_snapshots[fetched_at.isoformat()] = compact
+        print(f"[scheduler] Saved {len(coins)} coins to memory (no DATABASE_URL).")
+
+    # Warm the in-memory cache too
+    with _cache_lock:
+        _cache["data"] = coins
+        _cache["ts"] = time.time()
+
+
+# ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
 _init_db()
+
+_scheduler = BackgroundScheduler()
+_scheduler.add_job(
+    scheduled_snapshot,
+    CronTrigger(hour=6, minute=0, timezone=pytz.timezone("Europe/Paris")),
+)
+_scheduler.start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
