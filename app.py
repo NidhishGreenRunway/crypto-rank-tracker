@@ -172,10 +172,11 @@ def fetch_top1000():
 
 
 def _compact(coins):
-    """Minimal per-coin record for snapshot storage."""
+    """Per-coin record for snapshot storage."""
     return [
         {"r": c["rank"], "i": c["id"], "n": c["name"], "s": c["symbol"],
-         "cg": c["cgUrl"], "cmc": c["cmcUrl"], "img": c.get("image", "")}
+         "cg": c["cgUrl"], "cmc": c["cmcUrl"], "img": c.get("image", ""),
+         "p": c.get("price"), "ch": c.get("change24h"), "mc": c.get("marketCap")}
         for c in coins
     ]
 

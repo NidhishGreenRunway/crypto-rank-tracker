@@ -325,7 +325,8 @@ function expandSnapshot(key) {
   const raw = allSnapshots[key] || [];
   return raw.map(c => ({
     rank: c.r, id: c.i, name: c.n, symbol: c.s,
-    cgUrl: c.cg, cmcUrl: c.cmc, image: c.img || ''
+    cgUrl: c.cg, cmcUrl: c.cmc, image: c.img || '',
+    price: c.p ?? null, change24h: c.ch ?? null, marketCap: c.mc ?? null
   }));
 }
 
@@ -687,11 +688,7 @@ document.getElementById('clearSnapshots').addEventListener('click', clearAllSnap
   if (dates.length) {
     const latestKey = dates[dates.length - 1];
     const latestCoins = expandSnapshot(latestKey);
-    currentCoins = latestCoins.map(c => ({
-      rank: c.rank, id: c.id, name: c.name, symbol: c.symbol,
-      cgUrl: c.cgUrl, cmcUrl: c.cmcUrl, image: c.image,
-      price: null, change24h: null, marketCap: null
-    }));
+    currentCoins = latestCoins;
     const chip = document.getElementById('dataStatus');
     chip.textContent = `${currentCoins.length} coins from ${latestKey.slice(0,10)} (cached — click Fetch to refresh)`;
     chip.className = 'status-chip warn';
