@@ -729,7 +729,7 @@ function openChart(coinId, name, symbol) {
   const canvas = document.getElementById('chartCanvas');
   const empty  = document.getElementById('chartEmpty');
 
-  if (points.length < 2) {
+  if (points.length < 1) {
     canvas.style.display = 'none';
     empty.style.display  = 'block';
   } else {
@@ -754,104 +754,183 @@ function drawRankChart(canvas, points) {
   ctx.scale(dpr, dpr);
 
   const W = rect.width, H = rect.height;
-  const pad = { top: 16, right: 16, bottom: 40, left: 56 };
+  const pad = { top: 24, right: 20, bottom: 44, left: 62 };
   const cw = W - pad.left - pad.right;
   const ch = H - pad.top  - pad.bottom;
 
-  const ranks   = points.map(p => p.rank);
-  const minRank = Math.min(...ranks);
-  const maxRank = Math.max(...ranks);
+  const style   = getComputedStyle(document.documentElement);
+  const colBg     = style.getPropertyValue('--bg').trim();
+  const colBorder = style.getPropertyValue('--border').trim();
+  const colBlue   = style.getPropertyValue('--blue').trim();
+  const colGreen  = style.getPropertyValue('--green').trim();
+  const colRed    = style.getPropertyValue('--red').trim();
+  const colMuted  = style.getPropertyValue('--muted').trim();
+  const colText   = style.getPropertyValue('--text').trim();
+
+  const ranks = points.map(p => p.rank);
+  // Add 10% padding around the rank range so points aren't on the edge
+  const minRank = Math.max(1, Math.min(...ranks) - Math.ceil((Math.max(...ranks) - Math.min(...ranks)) * 0.1 + 1));
+  const maxRank = Math.max(...ranks) + Math.ceil((Math.max(...ranks) - Math.min(...ranks)) * 0.1 + 1);
   const rankSpan = maxRank - minRank || 1;
 
-  // Y is inverted: lower rank number = better = higher on chart
-  const xOf = i => pad.left + (i / (points.length - 1)) * cw;
-  const yOf = r => pad.top  + ((r - minRank) / rankSpan) * ch;
-
-  const style = getComputedStyle(document.documentElement);
-  const colBorder  = style.getPropertyValue('--border').trim();
-  const colBlue    = style.getPropertyValue('--blue').trim();
-  const colMuted   = style.getPropertyValue('--muted').trim();
-  const colText    = style.getPropertyValue('--text').trim();
-  const colSurface = style.getPropertyValue('--surface2').trim();
+  // Y: rank 1 (best) at TOP → lower rank number = higher y position
+  const xOf = i  => pad.left + (points.length < 2 ? cw / 2 : (i / (points.length - 1)) * cw);
+  const yOf = r  => pad.top  + ((r - minRank) / rankSpan) * ch;
 
   ctx.clearRect(0, 0, W, H);
 
-  // Grid lines (5 horizontal)
-  ctx.strokeStyle = colBorder;
+  // ---- Grid lines (5 horizontal) ----
   ctx.lineWidth = 1;
   for (let t = 0; t <= 4; t++) {
     const y = pad.top + (t / 4) * ch;
+    // dashed grid
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = colBorder;
     ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
-    const rankLabel = Math.round(minRank + ((4 - t) / 4) * rankSpan);
+    ctx.setLineDash([]);
+    // rank label — invert: top = minRank (best), bottom = maxRank (worst)
+    const rankLabel = Math.round(minRank + (t / 4) * rankSpan);
     ctx.fillStyle = colMuted;
-    ctx.font = '11px system-ui, sans-serif';
+    ctx.font = '11px system-ui,sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText('#' + rankLabel, pad.left - 6, y + 4);
+    ctx.fillText('#' + rankLabel, pad.left - 8, y + 4);
   }
 
-  // Shaded area under line
-  ctx.beginPath();
-  points.forEach((p, i) => {
-    const x = xOf(i), y = yOf(p.rank);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.lineTo(xOf(points.length - 1), pad.top + ch);
-  ctx.lineTo(xOf(0), pad.top + ch);
-  ctx.closePath();
-  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
-  grad.addColorStop(0, colBlue + '33');
-  grad.addColorStop(1, colBlue + '05');
-  ctx.fillStyle = grad;
-  ctx.fill();
+  // ---- Y-axis label ----
+  ctx.save();
+  ctx.translate(12, pad.top + ch / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = colMuted;
+  ctx.font = '11px system-ui,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Rank  ▲ better', 0, 0);
+  ctx.restore();
 
-  // Line
-  ctx.beginPath();
-  points.forEach((p, i) => {
-    const x = xOf(i), y = yOf(p.rank);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = colBlue;
-  ctx.lineWidth = 2.5;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
+  // ---- Shaded fill under line ----
+  if (points.length > 1) {
+    ctx.beginPath();
+    points.forEach((p, i) => {
+      const x = xOf(i), y = yOf(p.rank);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.lineTo(xOf(points.length - 1), pad.top + ch);
+    ctx.lineTo(xOf(0), pad.top + ch);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+    grad.addColorStop(0, colBlue + '22');
+    grad.addColorStop(1, colBlue + '04');
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
 
-  // Dots + hover target area (store coords for tooltip)
+  // ---- Colored segments (green = rank improved, red = rank worsened) ----
+  if (points.length > 1) {
+    for (let i = 1; i < points.length; i++) {
+      const x0 = xOf(i-1), y0 = yOf(points[i-1].rank);
+      const x1 = xOf(i),   y1 = yOf(points[i].rank);
+      // rank improved = current rank < previous rank (lower number = better)
+      const improved = points[i].rank < points[i-1].rank;
+      const same     = points[i].rank === points[i-1].rank;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.strokeStyle = same ? colBlue : (improved ? colGreen : colRed);
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    }
+  }
+
+  // ---- Dots ----
   canvas._chartPoints = [];
   points.forEach((p, i) => {
     const x = xOf(i), y = yOf(p.rank);
+    const isFirst = i === 0;
+    const improved = i > 0 && p.rank < points[i-1].rank;
+    const worsened = i > 0 && p.rank > points[i-1].rank;
+    const dotColor = points.length === 1 ? colBlue : (isFirst ? colBlue : (improved ? colGreen : (worsened ? colRed : colBlue)));
     ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fillStyle = colBlue;
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = dotColor;
     ctx.fill();
-    ctx.strokeStyle = style.getPropertyValue('--bg').trim();
+    ctx.strokeStyle = colBg;
     ctx.lineWidth = 2;
     ctx.stroke();
     canvas._chartPoints.push({ x, y, rank: p.rank, date: p.date });
   });
 
-  // X-axis date labels (up to 8 evenly spaced)
+  // ---- X-axis date labels (up to 8 evenly spaced) ----
   ctx.fillStyle = colMuted;
-  ctx.font = '11px system-ui, sans-serif';
+  ctx.font = '11px system-ui,sans-serif';
   ctx.textAlign = 'center';
-  const labelStep = Math.max(1, Math.floor(points.length / 8));
+  const maxLabels = 8;
+  const labelStep = Math.max(1, Math.floor(points.length / maxLabels));
   points.forEach((p, i) => {
     if (i % labelStep !== 0 && i !== points.length - 1) return;
-    ctx.fillText(p.date.slice(5), xOf(i), H - pad.bottom + 16); // MM-DD
+    // Full date line 1, day-of-week line 2
+    ctx.fillText(p.date.slice(5), xOf(i), H - pad.bottom + 14);
+    // Vertical tick
+    ctx.strokeStyle = colBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xOf(i), pad.top + ch);
+    ctx.lineTo(xOf(i), pad.top + ch + 4);
+    ctx.stroke();
   });
 
-  // Tooltip on mousemove
+  // ---- Tooltip overlay ----
+  const tooltip = { visible: false, x: 0, y: 0, text: '' };
+
+  function redrawTooltip() {
+    if (!tooltip.visible) return;
+    const tx = tooltip.x, ty = tooltip.y;
+    const text = tooltip.text;
+    ctx.font = 'bold 12px system-ui,sans-serif';
+    const tw = ctx.measureText(text).width + 16;
+    const th = 24;
+    let bx = tx + 10, by = ty - 30;
+    if (bx + tw > W - 4) bx = tx - tw - 10;
+    if (by < 4) by = ty + 10;
+    ctx.fillStyle = colText;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, tw, th, 4);
+    ctx.fillStyle = colBorder;
+    ctx.fill();
+    ctx.fillStyle = colText;
+    ctx.textAlign = 'left';
+    ctx.fillText(text, bx + 8, by + 16);
+  }
+
   canvas.onmousemove = (e) => {
     const r = canvas.getBoundingClientRect();
-    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const mx = (e.clientX - r.left), my = (e.clientY - r.top);
     let closest = null, minDist = Infinity;
     (canvas._chartPoints || []).forEach(p => {
       const d = Math.hypot(p.x - mx, p.y - my);
       if (d < minDist) { minDist = d; closest = p; }
     });
-    if (!closest || minDist > 30) { canvas.title = ''; return; }
-    canvas.title = `${closest.date}  ·  Rank #${closest.rank}`;
+    // Redraw base chart then tooltip
+    drawRankChart._drawBase && drawRankChart._drawBase();
+    if (closest && minDist < 32) {
+      tooltip.visible = true;
+      tooltip.x = closest.x; tooltip.y = closest.y;
+      tooltip.text = `${closest.date}  ·  Rank #${closest.rank}`;
+      // Highlight hovered dot
+      ctx.beginPath();
+      ctx.arc(closest.x, closest.y, 7, 0, Math.PI * 2);
+      ctx.fillStyle = colBlue;
+      ctx.fill();
+      ctx.strokeStyle = colBg;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      redrawTooltip();
+      canvas.style.cursor = 'crosshair';
+    } else {
+      tooltip.visible = false;
+      canvas.style.cursor = 'default';
+    }
   };
-  canvas.onmouseleave = () => { canvas.title = ''; };
+  canvas.onmouseleave = () => { tooltip.visible = false; canvas.style.cursor = 'default'; };
 }
 
 // ============================================================
