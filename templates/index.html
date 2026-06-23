@@ -111,6 +111,17 @@
   /* ---- Storage info ---- */
   .storage-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; width: 120px; display: inline-block; vertical-align: middle; margin-left: 6px; }
   .storage-bar-fill { height: 100%; background: var(--blue); transition: width 0.3s; }
+
+  /* ---- Rank Chart Modal ---- */
+  #chartModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10000; align-items:center; justify-content:center; }
+  #chartModal.open { display:flex; }
+  #chartBox { background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:24px; width:min(680px,95vw); box-shadow:0 16px 48px rgba(0,0,0,0.18); }
+  #chartTitle { font-size:16px; font-weight:700; color:var(--text); margin-bottom:4px; }
+  #chartSub { font-size:12px; color:var(--muted); margin-bottom:16px; }
+  #chartCanvas { width:100%; height:260px; display:block; }
+  #chartClose { float:right; background:none; border:none; font-size:20px; cursor:pointer; color:var(--muted); line-height:1; }
+  .chart-btn { display:inline-flex; align-items:center; justify-content:center; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text); font-size:13px; padding:3px 8px; cursor:pointer; transition:border-color 0.15s; }
+  .chart-btn:hover { border-color:var(--blue); color:var(--blue); }
 </style>
 </head>
 <body>
@@ -191,6 +202,17 @@
 
 <!-- TOAST -->
 <div id="toast"></div>
+
+<!-- RANK CHART MODAL -->
+<div id="chartModal">
+  <div id="chartBox">
+    <button id="chartClose" onclick="closeChart()" title="Close">✕</button>
+    <div id="chartTitle"></div>
+    <div id="chartSub"></div>
+    <canvas id="chartCanvas"></canvas>
+    <div id="chartEmpty" style="display:none;text-align:center;padding:60px 0;color:var(--muted);font-size:13px">Not enough snapshots to plot a chart yet.</div>
+  </div>
+</div>
 
 <script>
 // ============================================================
@@ -353,9 +375,13 @@ function coinCell(c) {
 }
 
 function linkCell(c) {
+  const id = esc(c.id || c.i || '');
+  const name = esc(c.name || c.n || '');
+  const sym = esc(c.symbol || c.s || '');
   return `<div class="links">
     <a class="link-chip" href="${c.cgUrl||c.cg||'#'}" target="_blank" rel="noopener">CG ↗</a>
     <a class="link-chip" href="${c.cmcUrl||c.cmc||'#'}" target="_blank" rel="noopener">CMC ↗</a>
+    <button class="chart-btn" onclick="openChart('${id}','${name}','${sym}')" title="Rank history chart">📈</button>
   </div>`;
 }
 
@@ -678,6 +704,155 @@ document.querySelectorAll('#movers-subtabs .subtab-btn').forEach(btn => {
 });
 
 document.getElementById('clearSnapshots').addEventListener('click', clearAllSnapshots);
+
+// Close modal on backdrop click
+document.getElementById('chartModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('chartModal')) closeChart();
+});
+
+// ============================================================
+// RANK CHART
+// ============================================================
+function openChart(coinId, name, symbol) {
+  const dates = snapshotDates();
+  const points = [];
+  dates.forEach(key => {
+    const coins = allSnapshots[key] || [];
+    const coin = coins.find(c => c.i === coinId);
+    if (coin) points.push({ date: key.slice(0, 10), rank: coin.r });
+  });
+
+  document.getElementById('chartTitle').textContent = `${name} (${symbol}) — Rank History`;
+  document.getElementById('chartSub').textContent =
+    points.length ? `${points[0].date} → ${points[points.length-1].date} · ${points.length} snapshots` : '';
+
+  const canvas = document.getElementById('chartCanvas');
+  const empty  = document.getElementById('chartEmpty');
+
+  if (points.length < 2) {
+    canvas.style.display = 'none';
+    empty.style.display  = 'block';
+  } else {
+    canvas.style.display = 'block';
+    empty.style.display  = 'none';
+    drawRankChart(canvas, points);
+  }
+
+  document.getElementById('chartModal').classList.add('open');
+}
+
+function closeChart() {
+  document.getElementById('chartModal').classList.remove('open');
+}
+
+function drawRankChart(canvas, points) {
+  const dpr  = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const W = rect.width, H = rect.height;
+  const pad = { top: 16, right: 16, bottom: 40, left: 56 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top  - pad.bottom;
+
+  const ranks   = points.map(p => p.rank);
+  const minRank = Math.min(...ranks);
+  const maxRank = Math.max(...ranks);
+  const rankSpan = maxRank - minRank || 1;
+
+  // Y is inverted: lower rank number = better = higher on chart
+  const xOf = i => pad.left + (i / (points.length - 1)) * cw;
+  const yOf = r => pad.top  + ((r - minRank) / rankSpan) * ch;
+
+  const style = getComputedStyle(document.documentElement);
+  const colBorder  = style.getPropertyValue('--border').trim();
+  const colBlue    = style.getPropertyValue('--blue').trim();
+  const colMuted   = style.getPropertyValue('--muted').trim();
+  const colText    = style.getPropertyValue('--text').trim();
+  const colSurface = style.getPropertyValue('--surface2').trim();
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid lines (5 horizontal)
+  ctx.strokeStyle = colBorder;
+  ctx.lineWidth = 1;
+  for (let t = 0; t <= 4; t++) {
+    const y = pad.top + (t / 4) * ch;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+    const rankLabel = Math.round(minRank + ((4 - t) / 4) * rankSpan);
+    ctx.fillStyle = colMuted;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('#' + rankLabel, pad.left - 6, y + 4);
+  }
+
+  // Shaded area under line
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = xOf(i), y = yOf(p.rank);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(xOf(points.length - 1), pad.top + ch);
+  ctx.lineTo(xOf(0), pad.top + ch);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+  grad.addColorStop(0, colBlue + '33');
+  grad.addColorStop(1, colBlue + '05');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = xOf(i), y = yOf(p.rank);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = colBlue;
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Dots + hover target area (store coords for tooltip)
+  canvas._chartPoints = [];
+  points.forEach((p, i) => {
+    const x = xOf(i), y = yOf(p.rank);
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = colBlue;
+    ctx.fill();
+    ctx.strokeStyle = style.getPropertyValue('--bg').trim();
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    canvas._chartPoints.push({ x, y, rank: p.rank, date: p.date });
+  });
+
+  // X-axis date labels (up to 8 evenly spaced)
+  ctx.fillStyle = colMuted;
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  const labelStep = Math.max(1, Math.floor(points.length / 8));
+  points.forEach((p, i) => {
+    if (i % labelStep !== 0 && i !== points.length - 1) return;
+    ctx.fillText(p.date.slice(5), xOf(i), H - pad.bottom + 16); // MM-DD
+  });
+
+  // Tooltip on mousemove
+  canvas.onmousemove = (e) => {
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    let closest = null, minDist = Infinity;
+    (canvas._chartPoints || []).forEach(p => {
+      const d = Math.hypot(p.x - mx, p.y - my);
+      if (d < minDist) { minDist = d; closest = p; }
+    });
+    if (!closest || minDist > 30) { canvas.title = ''; return; }
+    canvas.title = `${closest.date}  ·  Rank #${closest.rank}`;
+  };
+  canvas.onmouseleave = () => { canvas.title = ''; };
+}
 
 // ============================================================
 // INIT
