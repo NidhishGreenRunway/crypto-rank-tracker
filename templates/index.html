@@ -758,7 +758,7 @@ function drawRankChart(canvas, points) {
   ctx.scale(dpr, dpr);
 
   const W = rect.width, H = rect.height;
-  const pad = { top: 24, right: 20, bottom: 44, left: 62 };
+  const pad = { top: 24, right: 110, bottom: 44, left: 62 };
   const cw = W - pad.left - pad.right;
   const ch = H - pad.top  - pad.bottom;
 
@@ -903,8 +903,8 @@ function drawRankChart(canvas, points) {
     ctx.fillText(label2, bx + 7, by + 27);
   }
 
-  if (points.length >= 1) drawCallout(points[0], 0, 'right');
-  if (points.length >= 2) drawCallout(points[points.length - 1], points.length - 1, 'left');
+  if (points.length >= 1) drawCallout(points[0], 0, 'left');
+  if (points.length >= 2) drawCallout(points[points.length - 1], points.length - 1, 'right');
 
   // ---- X-axis date labels (up to 8 evenly spaced) ----
   ctx.fillStyle = colMuted;
