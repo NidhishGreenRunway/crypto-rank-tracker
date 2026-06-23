@@ -739,6 +739,10 @@ function openChart(coinId, name, symbol) {
   }
 
   document.getElementById('chartModal').classList.add('open');
+  // Defer drawing until the modal is visible and canvas has real dimensions
+  requestAnimationFrame(() => {
+    if (points.length >= 1) drawRankChart(canvas, points);
+  });
 }
 
 function closeChart() {
