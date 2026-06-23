@@ -863,6 +863,49 @@ function drawRankChart(canvas, points) {
     canvas._chartPoints.push({ x, y, rank: p.rank, date: p.date });
   });
 
+  // ---- First & last point callout labels ----
+  function drawCallout(p, i, align) {
+    const x = xOf(i), y = yOf(p.rank);
+    const label1 = p.date;
+    const label2 = 'Rank #' + p.rank;
+    ctx.font = 'bold 11px system-ui,sans-serif';
+    const w = Math.max(ctx.measureText(label1).width, ctx.measureText(label2).width) + 14;
+    const h = 34;
+    let bx = align === 'left' ? x + 10 : x - w - 10;
+    let by = y - h / 2;
+    // Clamp vertically
+    by = Math.max(pad.top, Math.min(by, pad.top + ch - h));
+    // Bubble
+    ctx.fillStyle = colText;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, w, h, 5);
+    ctx.fillStyle = colBorder;
+    ctx.strokeStyle = colBlue;
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+    // Connector line
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(align === 'left' ? bx : bx + w, by + h / 2);
+    ctx.strokeStyle = colBlue;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Text
+    ctx.fillStyle = colMuted;
+    ctx.font = '10px system-ui,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(label1, bx + 7, by + 13);
+    ctx.fillStyle = colText;
+    ctx.font = 'bold 11px system-ui,sans-serif';
+    ctx.fillText(label2, bx + 7, by + 27);
+  }
+
+  if (points.length >= 1) drawCallout(points[0], 0, 'right');
+  if (points.length >= 2) drawCallout(points[points.length - 1], points.length - 1, 'left');
+
   // ---- X-axis date labels (up to 8 evenly spaced) ----
   ctx.fillStyle = colMuted;
   ctx.font = '11px system-ui,sans-serif';
