@@ -777,9 +777,9 @@ function drawRankChart(canvas, points) {
   const maxRank = Math.max(...ranks) + Math.ceil((Math.max(...ranks) - Math.min(...ranks)) * 0.1 + 1);
   const rankSpan = maxRank - minRank || 1;
 
-  // Y: rank 1 (best) at TOP → lower rank number = higher y position
+  // Y: rank 1 (best) at BOTTOM → higher rank number = higher y position
   const xOf = i  => pad.left + (points.length < 2 ? cw / 2 : (i / (points.length - 1)) * cw);
-  const yOf = r  => pad.top  + ((r - minRank) / rankSpan) * ch;
+  const yOf = r  => pad.top  + ch - ((r - minRank) / rankSpan) * ch;
 
   ctx.clearRect(0, 0, W, H);
 
@@ -792,8 +792,8 @@ function drawRankChart(canvas, points) {
     ctx.strokeStyle = colBorder;
     ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
     ctx.setLineDash([]);
-    // rank label — invert: top = minRank (best), bottom = maxRank (worst)
-    const rankLabel = Math.round(minRank + (t / 4) * rankSpan);
+    // rank label — bottom = minRank (best), top = maxRank (worst)
+    const rankLabel = Math.round(maxRank - (t / 4) * rankSpan);
     ctx.fillStyle = colMuted;
     ctx.font = '11px system-ui,sans-serif';
     ctx.textAlign = 'right';
