@@ -36,6 +36,10 @@ _mem_users_id = {}    # id -> user dict
 _mem_users_lock = threading.Lock()
 _mem_user_seq = [1]
 
+_mem_watchlists = {}  # id -> {id, user_id, name, coins: {coin_id: {coin_name,coin_symbol,coin_image}}}
+_mem_wl_lock = threading.Lock()
+_mem_wl_seq = [1]
+
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 HEADERS = {"Accept": "application/json", "User-Agent": "CryptoRankTracker/1.0"}
 
@@ -76,6 +80,25 @@ def _init_db():
                         password_hash TEXT NOT NULL,
                         totp_secret   TEXT,
                         created_at    TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS watchlists (
+                        id         SERIAL PRIMARY KEY,
+                        user_id    INTEGER NOT NULL,
+                        name       TEXT NOT NULL,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS watchlist_coins (
+                        watchlist_id INTEGER NOT NULL,
+                        coin_id      TEXT NOT NULL,
+                        coin_name    TEXT,
+                        coin_symbol  TEXT,
+                        coin_image   TEXT,
+                        added_at     TIMESTAMPTZ DEFAULT NOW(),
+                        PRIMARY KEY (watchlist_id, coin_id)
                     )
                 """)
     finally:
@@ -449,6 +472,173 @@ def api_snapshots_clear():
         with _mem_lock:
             _mem_snapshots.clear()
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Watchlist routes
+# ---------------------------------------------------------------------------
+def _wl_owned(wl_id, user_id):
+    """Return watchlist dict if it belongs to user, else None."""
+    conn = _get_conn()
+    if conn:
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, name FROM watchlists WHERE id=%s AND user_id=%s", (wl_id, user_id))
+                row = cur.fetchone()
+                return {'id': row[0], 'name': row[1]} if row else None
+        finally:
+            conn.close()
+    with _mem_wl_lock:
+        wl = _mem_watchlists.get(wl_id)
+        if wl and wl['user_id'] == user_id:
+            return {'id': wl['id'], 'name': wl['name']}
+    return None
+
+
+@app.route('/api/watchlists', methods=['GET'])
+@login_required
+def get_watchlists():
+    uid = session['user_id']
+    conn = _get_conn()
+    if conn:
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, name FROM watchlists WHERE user_id=%s ORDER BY created_at", (uid,))
+                wls = [{'id': r[0], 'name': r[1], 'coins': []} for r in cur.fetchall()]
+                for wl in wls:
+                    cur.execute(
+                        "SELECT coin_id, coin_name, coin_symbol, coin_image FROM watchlist_coins WHERE watchlist_id=%s ORDER BY added_at",
+                        (wl['id'],)
+                    )
+                    wl['coins'] = [{'coin_id': r[0], 'coin_name': r[1], 'coin_symbol': r[2], 'coin_image': r[3]} for r in cur.fetchall()]
+        finally:
+            conn.close()
+    else:
+        with _mem_wl_lock:
+            wls = [
+                {'id': wl['id'], 'name': wl['name'],
+                 'coins': [{'coin_id': k, **v} for k, v in wl['coins'].items()]}
+                for wl in _mem_watchlists.values() if wl['user_id'] == uid
+            ]
+    return jsonify({'watchlists': wls})
+
+
+@app.route('/api/watchlists', methods=['POST'])
+@login_required
+def create_watchlist():
+    uid = session['user_id']
+    name = ((request.get_json() or {}).get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Name required'}), 400
+    conn = _get_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO watchlists (user_id, name) VALUES (%s, %s) RETURNING id",
+                        (uid, name)
+                    )
+                    wl_id = cur.fetchone()[0]
+        finally:
+            conn.close()
+    else:
+        with _mem_wl_lock:
+            wl_id = _mem_wl_seq[0]; _mem_wl_seq[0] += 1
+            _mem_watchlists[wl_id] = {'id': wl_id, 'user_id': uid, 'name': name, 'coins': {}}
+    return jsonify({'id': wl_id, 'name': name, 'coins': []})
+
+
+@app.route('/api/watchlists/<int:wl_id>', methods=['PATCH'])
+@login_required
+def rename_watchlist(wl_id):
+    if not _wl_owned(wl_id, session['user_id']):
+        return jsonify({'error': 'Not found'}), 404
+    name = ((request.get_json() or {}).get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Name required'}), 400
+    conn = _get_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE watchlists SET name=%s WHERE id=%s", (name, wl_id))
+        finally:
+            conn.close()
+    else:
+        with _mem_wl_lock:
+            if wl_id in _mem_watchlists:
+                _mem_watchlists[wl_id]['name'] = name
+    return jsonify({'ok': True, 'name': name})
+
+
+@app.route('/api/watchlists/<int:wl_id>', methods=['DELETE'])
+@login_required
+def delete_watchlist(wl_id):
+    if not _wl_owned(wl_id, session['user_id']):
+        return jsonify({'error': 'Not found'}), 404
+    conn = _get_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM watchlist_coins WHERE watchlist_id=%s", (wl_id,))
+                    cur.execute("DELETE FROM watchlists WHERE id=%s", (wl_id,))
+        finally:
+            conn.close()
+    else:
+        with _mem_wl_lock:
+            _mem_watchlists.pop(wl_id, None)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/watchlists/<int:wl_id>/coins', methods=['POST'])
+@login_required
+def add_coin_to_watchlist(wl_id):
+    if not _wl_owned(wl_id, session['user_id']):
+        return jsonify({'error': 'Not found'}), 404
+    d = request.get_json() or {}
+    coin_id = (d.get('coin_id') or '').strip()
+    if not coin_id:
+        return jsonify({'error': 'coin_id required'}), 400
+    conn = _get_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO watchlist_coins (watchlist_id, coin_id, coin_name, coin_symbol, coin_image)
+                        VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING
+                    """, (wl_id, coin_id, d.get('coin_name'), d.get('coin_symbol'), d.get('coin_image')))
+        finally:
+            conn.close()
+    else:
+        with _mem_wl_lock:
+            if wl_id in _mem_watchlists:
+                _mem_watchlists[wl_id]['coins'][coin_id] = {
+                    'coin_name': d.get('coin_name'), 'coin_symbol': d.get('coin_symbol'), 'coin_image': d.get('coin_image')
+                }
+    return jsonify({'ok': True})
+
+
+@app.route('/api/watchlists/<int:wl_id>/coins/<coin_id>', methods=['DELETE'])
+@login_required
+def remove_coin_from_watchlist(wl_id, coin_id):
+    if not _wl_owned(wl_id, session['user_id']):
+        return jsonify({'error': 'Not found'}), 404
+    conn = _get_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM watchlist_coins WHERE watchlist_id=%s AND coin_id=%s", (wl_id, coin_id))
+        finally:
+            conn.close()
+    else:
+        with _mem_wl_lock:
+            if wl_id in _mem_watchlists:
+                _mem_watchlists[wl_id]['coins'].pop(coin_id, None)
+    return jsonify({'ok': True})
 
 
 @app.route("/api/cache/clear", methods=["POST"])

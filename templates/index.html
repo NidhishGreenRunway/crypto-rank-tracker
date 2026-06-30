@@ -158,6 +158,25 @@
   .tfa-qr { text-align:center; margin:12px 0; }
   .tfa-secret { font-family:monospace; font-size:12px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:8px 12px; word-break:break-all; margin:10px 0; color:var(--muted); }
 
+  /* ---- Favourite / Watchlist ---- */
+  .fav-btn { background:none; border:none; cursor:pointer; font-size:16px; padding:2px 5px; color:var(--muted); transition:color 0.15s,transform 0.1s; line-height:1; border-radius:4px; }
+  .fav-btn:hover { color:var(--gold); transform:scale(1.2); }
+  .fav-btn.in-list { color:var(--gold); }
+  /* Watchlist picker */
+  .wl-picker { position:fixed; background:var(--bg); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,0.14); width:220px; z-index:15000; padding:6px 0; }
+  .wl-picker-header { padding:8px 12px 6px; font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; border-bottom:1px solid var(--border); margin-bottom:4px; }
+  .wl-picker-item { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer; font-size:13px; color:var(--text); transition:background 0.1s; }
+  .wl-picker-item:hover { background:var(--surface2); }
+  .wl-picker-item input[type=checkbox] { accent-color:var(--accent); width:14px; height:14px; cursor:pointer; }
+  .wl-picker-divider { border:none; border-top:1px solid var(--border); margin:4px 0; }
+  .wl-picker-new { display:flex; align-items:center; gap:6px; padding:8px 12px; cursor:pointer; font-size:13px; color:var(--blue); font-weight:600; }
+  .wl-picker-new:hover { background:var(--surface2); }
+  /* Favorites tab pane */
+  .wl-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  .wl-selector { padding:7px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface2); color:var(--text); font-size:13px; cursor:pointer; }
+  .wl-empty { text-align:center; padding:60px 20px; color:var(--muted); }
+  .wl-empty h3 { color:var(--text); margin-bottom:6px; }
+
   /* ---- Rank Chart Modal ---- */
   #chartModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10000; align-items:center; justify-content:center; }
   #chartModal.open { display:flex; }
@@ -203,6 +222,7 @@
   <button class="tab-btn active" data-tab="breakouts">🏆 Rank Breakouts</button>
   <button class="tab-btn" data-tab="movers">📈 Biggest Movers</button>
   <button class="tab-btn" data-tab="browser">🔍 Browse Top 1000</button>
+  <button class="tab-btn" data-tab="favorites">⭐ Favorites</button>
 </nav>
 
 <!-- ================================================================
@@ -259,6 +279,31 @@
   <div id="browser-content">
     <div class="empty-state"><div class="icon">📡</div><h3>No data yet</h3><p>Click <strong>Fetch Live Data</strong> to load rankings.</p></div>
   </div>
+</div>
+
+<!-- ================================================================
+     TAB 4 — FAVORITES
+================================================================ -->
+<div class="pane" id="pane-favorites">
+  <div class="wl-toolbar">
+    <select class="wl-selector" id="wlSelector" onchange="renderFavorites()">
+      <option value="">— select a watchlist —</option>
+    </select>
+    <button class="btn" onclick="promptCreateWatchlist()">＋ New Watchlist</button>
+    <button class="btn secondary" id="wlRenameBtn" onclick="promptRenameWatchlist()" style="display:none">✎ Rename</button>
+    <button class="btn secondary" id="wlDeleteBtn" onclick="confirmDeleteWatchlist()" style="display:none" style="color:var(--red)">🗑 Delete</button>
+  </div>
+  <div id="favorites-content">
+    <div class="wl-empty"><div class="icon" style="font-size:40px;margin-bottom:10px">⭐</div><h3>No watchlist selected</h3><p>Create a watchlist and star coins to track them here.</p></div>
+  </div>
+</div>
+
+<!-- WATCHLIST PICKER (floating) -->
+<div id="wlPicker" class="wl-picker" style="display:none">
+  <div class="wl-picker-header">Add to watchlist</div>
+  <div id="wlPickerList"></div>
+  <hr class="wl-picker-divider"/>
+  <div class="wl-picker-new" onclick="promptCreateWatchlistFromPicker()">＋ New watchlist</div>
 </div>
 
 <!-- TOAST -->
@@ -488,10 +533,13 @@ function coinCell(c) {
 }
 
 function linkCell(c) {
-  const id = esc(c.id || c.i || '');
-  const name = esc(c.name || c.n || '');
-  const sym = esc(c.symbol || c.s || '');
+  const id  = (c.id  || c.i  || '').replace(/'/g, "\\'");
+  const name = (c.name || c.n || '').replace(/'/g, "\\'");
+  const sym  = (c.symbol || c.s || '').replace(/'/g, "\\'");
+  const img  = (c.image || c.img || '').replace(/'/g, "\\'");
+  const inList = isInAnyWatchlist(c.id || c.i || '');
   return `<div class="links">
+    <button class="fav-btn${inList?' in-list':''}" onclick="showWlPicker(event,'${id}','${name}','${sym}','${img}')" title="Add to watchlist">${inList?'★':'☆'}</button>
     <a class="link-chip" href="${c.cgUrl||c.cg||'#'}" target="_blank" rel="noopener">CG ↗</a>
     <a class="link-chip" href="${c.cmcUrl||c.cmc||'#'}" target="_blank" rel="noopener">CMC ↗</a>
     <button class="chart-btn" onclick="openChart('${id}','${name}','${sym}')" title="Rank history chart">📈</button>
@@ -770,6 +818,7 @@ function renderAll() {
   if (activeTab === 'breakouts') renderBreakouts();
   else if (activeTab === 'movers') renderMovers();
   else if (activeTab === 'browser') renderBrowser();
+  else if (activeTab === 'favorites') renderFavorites();
 }
 
 // ============================================================
@@ -863,11 +912,10 @@ async function checkAuth() {
   if (!data.loggedIn) {
     showAuthModal('login');
   } else {
-    await loadSnapshots();
+    await Promise.all([loadSnapshots(), loadWatchlists()]);
     const dates = snapshotDates();
     if (dates.length) {
-      const latestKey = dates[dates.length - 1];
-      currentCoins = expandSnapshot(latestKey);
+      currentCoins = expandSnapshot(dates[dates.length - 1]);
       renderAll();
     }
   }
@@ -942,7 +990,7 @@ async function handleAuthSubmit() {
     _currentUser = { email: data.email, has2fa: data.has2fa || false };
     closeAuthModal();
     updateUserUI();
-    await loadSnapshots();
+    await Promise.all([loadSnapshots(), loadWatchlists()]);
     const dates = snapshotDates();
     if (dates.length) { currentCoins = expandSnapshot(dates[dates.length-1]); renderAll(); }
     toast(`Welcome, ${data.email}!`, 'ok');
@@ -966,7 +1014,7 @@ async function handle2faLogin() {
   _currentUser = { email: data.email, has2fa: true };
   closeAuthModal();
   updateUserUI();
-  await loadSnapshots();
+  await Promise.all([loadSnapshots(), loadWatchlists()]);
   const dates = snapshotDates();
   if (dates.length) { currentCoins = expandSnapshot(dates[dates.length-1]); renderAll(); }
   toast(`Welcome back, ${data.email}!`, 'ok');
@@ -1292,6 +1340,233 @@ function drawRankChart(canvas, points) {
     }
   };
   canvas.onmouseleave = () => { tooltip.visible = false; canvas.style.cursor = 'default'; };
+}
+
+// ============================================================
+// WATCHLISTS
+// ============================================================
+let watchlists = []; // [{id, name, coins:[{coin_id,coin_name,coin_symbol,coin_image}]}]
+let _pickerCoin = null; // coin being added via picker
+
+function isInAnyWatchlist(coinId) {
+  return watchlists.some(wl => wl.coins.some(c => c.coin_id === coinId));
+}
+
+function isInWatchlist(wlId, coinId) {
+  const wl = watchlists.find(w => w.id === wlId);
+  return wl ? wl.coins.some(c => c.coin_id === coinId) : false;
+}
+
+async function loadWatchlists() {
+  try {
+    const res = await fetch('/api/watchlists');
+    if (!res.ok) return;
+    const data = await res.json();
+    watchlists = data.watchlists || [];
+    refreshWlSelector();
+  } catch(e) { console.warn('loadWatchlists:', e); }
+}
+
+function refreshWlSelector() {
+  const sel = document.getElementById('wlSelector');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— select a watchlist —</option>' +
+    watchlists.map(wl => `<option value="${wl.id}">${esc(wl.name)} (${wl.coins.length})</option>`).join('');
+  if (cur && watchlists.find(w => String(w.id) === cur)) sel.value = cur;
+  const hasSelection = !!sel.value;
+  document.getElementById('wlRenameBtn').style.display = hasSelection ? '' : 'none';
+  document.getElementById('wlDeleteBtn').style.display = hasSelection ? '' : 'none';
+}
+
+// ---- Picker ----
+function showWlPicker(e, coinId, name, sym, img) {
+  e.stopPropagation();
+  _pickerCoin = { coin_id: coinId, coin_name: name, coin_symbol: sym, coin_image: img };
+  const list = document.getElementById('wlPickerList');
+  if (!watchlists.length) {
+    list.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--muted)">No watchlists yet</div>';
+  } else {
+    list.innerHTML = watchlists.map(wl => {
+      const checked = isInWatchlist(wl.id, coinId);
+      return `<label class="wl-picker-item">
+        <input type="checkbox" ${checked?'checked':''} onchange="toggleWlCoin(${wl.id},this.checked)"/>
+        ${esc(wl.name)}
+      </label>`;
+    }).join('');
+  }
+  const picker = document.getElementById('wlPicker');
+  picker.style.display = 'block';
+  // Position near click
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = e.clientX + 8, y = e.clientY + 8;
+  if (x + 230 > vw) x = e.clientX - 230;
+  if (y + 300 > vh) y = e.clientY - 200;
+  picker.style.left = x + 'px';
+  picker.style.top  = y + 'px';
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#wlPicker') && !e.target.closest('.fav-btn')) {
+    document.getElementById('wlPicker').style.display = 'none';
+  }
+});
+
+async function toggleWlCoin(wlId, add) {
+  if (!_pickerCoin) return;
+  const { coin_id, coin_name, coin_symbol, coin_image } = _pickerCoin;
+  if (add) {
+    await fetch(`/api/watchlists/${wlId}/coins`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ coin_id, coin_name, coin_symbol, coin_image })
+    });
+    const wl = watchlists.find(w => w.id === wlId);
+    if (wl && !wl.coins.some(c => c.coin_id === coin_id))
+      wl.coins.push({ coin_id, coin_name, coin_symbol, coin_image });
+  } else {
+    await fetch(`/api/watchlists/${wlId}/coins/${encodeURIComponent(coin_id)}`, { method: 'DELETE' });
+    const wl = watchlists.find(w => w.id === wlId);
+    if (wl) wl.coins = wl.coins.filter(c => c.coin_id !== coin_id);
+  }
+  refreshWlSelector();
+  renderAll(); // re-render so star colours update
+  if (activeTab === 'favorites') renderFavorites();
+}
+
+async function promptCreateWatchlist() {
+  const name = prompt('Watchlist name:');
+  if (!name || !name.trim()) return;
+  const res  = await fetch('/api/watchlists', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name: name.trim() })
+  });
+  if (!res.ok) { toast('Failed to create watchlist', 'err'); return; }
+  const wl = await res.json();
+  wl.coins = [];
+  watchlists.push(wl);
+  refreshWlSelector();
+  document.getElementById('wlSelector').value = String(wl.id);
+  document.getElementById('wlRenameBtn').style.display = '';
+  document.getElementById('wlDeleteBtn').style.display = '';
+  renderFavorites();
+  toast(`Watchlist "${wl.name}" created`, 'ok');
+}
+
+async function promptCreateWatchlistFromPicker() {
+  document.getElementById('wlPicker').style.display = 'none';
+  const name = prompt('New watchlist name:');
+  if (!name || !name.trim()) return;
+  const res = await fetch('/api/watchlists', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name: name.trim() })
+  });
+  if (!res.ok) { toast('Failed to create watchlist', 'err'); return; }
+  const wl = await res.json();
+  wl.coins = [];
+  watchlists.push(wl);
+  refreshWlSelector();
+  toast(`Watchlist "${wl.name}" created`, 'ok');
+  // auto-add the coin
+  if (_pickerCoin) {
+    await toggleWlCoin(wl.id, true);
+  }
+}
+
+async function promptRenameWatchlist() {
+  const sel = document.getElementById('wlSelector');
+  const wlId = parseInt(sel.value);
+  const wl   = watchlists.find(w => w.id === wlId);
+  if (!wl) return;
+  const name = prompt('New name:', wl.name);
+  if (!name || !name.trim() || name.trim() === wl.name) return;
+  const res = await fetch(`/api/watchlists/${wlId}`, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name: name.trim() })
+  });
+  if (!res.ok) { toast('Failed to rename', 'err'); return; }
+  wl.name = name.trim();
+  refreshWlSelector();
+  sel.value = String(wlId);
+  toast(`Renamed to "${wl.name}"`, 'ok');
+}
+
+async function confirmDeleteWatchlist() {
+  const sel  = document.getElementById('wlSelector');
+  const wlId = parseInt(sel.value);
+  const wl   = watchlists.find(w => w.id === wlId);
+  if (!wl) return;
+  if (!confirm(`Delete watchlist "${wl.name}"? This cannot be undone.`)) return;
+  const res = await fetch(`/api/watchlists/${wlId}`, { method: 'DELETE' });
+  if (!res.ok) { toast('Failed to delete', 'err'); return; }
+  watchlists = watchlists.filter(w => w.id !== wlId);
+  refreshWlSelector();
+  renderFavorites();
+  renderAll();
+  toast(`Watchlist deleted`, 'ok');
+}
+
+// ---- Render Favorites tab ----
+function renderFavorites() {
+  const sel   = document.getElementById('wlSelector');
+  const wlId  = parseInt(sel.value);
+  const wl    = watchlists.find(w => w.id === wlId);
+  const el    = document.getElementById('favorites-content');
+
+  document.getElementById('wlRenameBtn').style.display = wl ? '' : 'none';
+  document.getElementById('wlDeleteBtn').style.display = wl ? '' : 'none';
+
+  if (!wl) {
+    el.innerHTML = watchlists.length
+      ? '<div class="wl-empty"><h3>Select a watchlist above</h3></div>'
+      : '<div class="wl-empty"><div style="font-size:40px;margin-bottom:10px">⭐</div><h3>No watchlists yet</h3><p>Click <strong>＋ New Watchlist</strong> to get started, then star coins from any tab.</p></div>';
+    return;
+  }
+
+  if (!wl.coins.length) {
+    el.innerHTML = `<div class="wl-empty"><div style="font-size:40px;margin-bottom:10px">☆</div><h3>"${esc(wl.name)}" is empty</h3><p>Click the ☆ star next to any coin to add it here.</p></div>`;
+    return;
+  }
+
+  // Enrich with live price data if available
+  const liveMap = {};
+  (currentCoins || []).forEach(c => { liveMap[c.id] = c; });
+
+  const rows = wl.coins.map(c => {
+    const live = liveMap[c.coin_id] || {};
+    const rank = live.rank ? `<span class="rank-badge">#${live.rank}</span>` : '<span class="change-none">—</span>';
+    const price = live.price != null ? '$' + live.price.toLocaleString(undefined,{maximumFractionDigits:6}) : '—';
+    const ch = live.change24h != null
+      ? `<span class="${live.change24h>=0?'change-up':'change-down'}">${live.change24h>=0?'▲':'▼'} ${Math.abs(live.change24h).toFixed(2)}%</span>`
+      : '—';
+    const img = c.coin_image || '';
+    const cgUrl  = `https://www.coingecko.com/en/coins/${c.coin_id}`;
+    const cmcUrl = `https://coinmarketcap.com/currencies/${c.coin_id}/`;
+    const coinObj = { id: c.coin_id, name: c.coin_name, symbol: c.coin_symbol, image: img, cgUrl, cmcUrl };
+    return `<tr>
+      <td>${rank}</td>
+      <td>${coinCell(coinObj)}</td>
+      <td style="color:var(--text);font-variant-numeric:tabular-nums">${price}</td>
+      <td>${ch}</td>
+      <td>${linkCell(coinObj)}</td>
+      <td><button class="btn secondary" style="padding:4px 8px;font-size:11px" onclick="removeFromWl(${wl.id},'${c.coin_id.replace(/'/g,"\\'")}')">✕ Remove</button></td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Rank</th><th>Coin</th><th>Price</th><th>24h %</th><th>Links</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function removeFromWl(wlId, coinId) {
+  await fetch(`/api/watchlists/${wlId}/coins/${encodeURIComponent(coinId)}`, { method: 'DELETE' });
+  const wl = watchlists.find(w => w.id === wlId);
+  if (wl) wl.coins = wl.coins.filter(c => c.coin_id !== coinId);
+  refreshWlSelector();
+  renderFavorites();
+  renderAll();
 }
 
 // ============================================================
