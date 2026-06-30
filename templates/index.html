@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Crypto Rank Tracker</title>
+<title>CryptoRank Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
     --bg: #ffffff;
@@ -112,6 +113,51 @@
   .storage-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; width: 120px; display: inline-block; vertical-align: middle; margin-left: 6px; }
   .storage-bar-fill { height: 100%; background: var(--blue); transition: width 0.3s; }
 
+  /* ---- Site Banner ---- */
+  .site-banner { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); color: #fff; padding: 18px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .site-brand { display: flex; align-items: center; gap: 14px; }
+  .site-logo-icon { font-size: 36px; line-height: 1; }
+  .site-name { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; color: #fff; }
+  .site-tagline { font-size: 12px; color: #93c5fd; margin-top: 2px; }
+  .site-user { display: flex; align-items: center; gap: 10px; }
+  .site-user-email { font-size: 13px; color: #cbd5e1; }
+  .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,0.35); color: #fff; border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.15s; white-space: nowrap; }
+  .btn-outline:hover { background: rgba(255,255,255,0.1); }
+  .btn-outline.accent { background: #2563eb; border-color: #2563eb; }
+  .btn-outline.accent:hover { background: #1d4ed8; }
+
+  /* ---- Snapshot dropdown ---- */
+  .snapshot-wrap { position: relative; display: inline-block; }
+  .status-chip.clickable { cursor: pointer; user-select: none; }
+  .status-chip.clickable:hover { border-color: var(--blue); color: var(--blue); }
+  .snapshot-dropdown { display: none; position: absolute; top: calc(100% + 6px); left: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); min-width: 170px; z-index: 999; padding: 6px 0; max-height: 260px; overflow-y: auto; }
+  .snapshot-dropdown.open { display: block; }
+  .snapshot-date-item { padding: 8px 14px; font-size: 13px; color: var(--text); cursor: default; white-space: nowrap; }
+  .snapshot-date-item:hover { background: var(--surface2); }
+
+  /* ---- Auth Modal ---- */
+  #authModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:20000; align-items:center; justify-content:center; }
+  #authModal.open { display:flex; }
+  .auth-box { background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:32px; width:min(420px,94vw); box-shadow:0 24px 64px rgba(0,0,0,0.2); }
+  .auth-logo { text-align:center; font-size:32px; margin-bottom:6px; }
+  .auth-title { text-align:center; font-size:20px; font-weight:800; color:var(--text); margin-bottom:4px; }
+  .auth-sub { text-align:center; font-size:13px; color:var(--muted); margin-bottom:24px; }
+  .auth-tabs { display:flex; gap:0; border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-bottom:22px; }
+  .auth-tab { flex:1; background:none; border:none; padding:10px; font-size:13px; font-weight:600; cursor:pointer; color:var(--muted); transition:all 0.15s; }
+  .auth-tab.active { background:var(--accent); color:#fff; }
+  .auth-field { margin-bottom:14px; }
+  .auth-field label { display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:5px; }
+  .auth-field input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:7px; font-size:14px; color:var(--text); background:var(--surface); outline:none; transition:border-color 0.15s; }
+  .auth-field input:focus { border-color:var(--blue); }
+  .auth-error { color:var(--red); font-size:12px; margin-bottom:12px; min-height:16px; }
+  .auth-submit { width:100%; padding:11px; background:var(--accent); color:#fff; border:none; border-radius:7px; font-size:14px; font-weight:700; cursor:pointer; transition:opacity 0.15s; }
+  .auth-submit:hover { opacity:0.88; }
+  .auth-submit:disabled { opacity:0.45; cursor:not-allowed; }
+  .auth-switch { text-align:center; font-size:12px; color:var(--muted); margin-top:16px; }
+  .auth-switch a { color:var(--blue); cursor:pointer; text-decoration:none; }
+  .tfa-qr { text-align:center; margin:12px 0; }
+  .tfa-secret { font-family:monospace; font-size:12px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:8px 12px; word-break:break-all; margin:10px 0; color:var(--muted); }
+
   /* ---- Rank Chart Modal ---- */
   #chartModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10000; align-items:center; justify-content:center; }
   #chartModal.open { display:flex; }
@@ -126,14 +172,29 @@
 </head>
 <body>
 
-<!-- HEADER -->
-<header>
-  <h1>📊 Crypto Rank Tracker</h1>
-  <div class="status-bar">
-    <span class="status-chip" id="dataStatus">No data loaded</span>
-    <span class="status-chip" id="snapshotStatus">0 snapshots stored</span>
+<!-- SITE BANNER -->
+<div class="site-banner">
+  <div class="site-brand">
+    <div class="site-logo-icon">📊</div>
+    <div>
+      <div class="site-name">CryptoRank Tracker</div>
+      <div class="site-tagline">Live rankings &amp; historical analysis of the top 1000 cryptocurrencies</div>
+    </div>
   </div>
-  <button class="btn secondary danger" id="clearSnapshots" title="Delete all stored historical snapshots from database">🗑 Clear History</button>
+  <div class="site-user" id="siteUser">
+    <button class="btn-outline accent" onclick="showAuthModal('login')">Log In</button>
+    <button class="btn-outline" onclick="showAuthModal('signup')">Sign Up</button>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<header>
+  <div class="status-bar">
+    <div class="snapshot-wrap">
+      <span class="status-chip clickable" id="snapshotStatus" onclick="toggleSnapshotDropdown()">0 Snapshots</span>
+      <div class="snapshot-dropdown" id="snapshotDropdown"></div>
+    </div>
+  </div>
   <button class="btn" id="refreshBtn" onclick="fetchAndSave()">⟳ Fetch Live Data</button>
 </header>
 
@@ -203,6 +264,58 @@
 <!-- TOAST -->
 <div id="toast"></div>
 
+<!-- AUTH MODAL -->
+<div id="authModal">
+  <div class="auth-box">
+    <div class="auth-logo">📊</div>
+    <div class="auth-title">CryptoRank Tracker</div>
+    <div class="auth-sub" id="authSub">Sign in to your account</div>
+
+    <!-- Login / Signup tabs -->
+    <div class="auth-tabs" id="authTabs">
+      <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">Log In</button>
+      <button class="auth-tab" id="tabSignup" onclick="switchAuthTab('signup')">Sign Up</button>
+    </div>
+
+    <div id="authFormWrap">
+      <div class="auth-field">
+        <label>Email address</label>
+        <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email"/>
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="authPassword" placeholder="••••••••" autocomplete="current-password"/>
+      </div>
+      <div class="auth-error" id="authError"></div>
+      <button class="auth-submit" id="authSubmit" onclick="handleAuthSubmit()">Log In</button>
+      <p class="auth-switch" id="authSwitch">Don't have an account? <a onclick="switchAuthTab('signup')">Sign up</a></p>
+    </div>
+
+    <!-- 2FA verify step (shown after login if 2FA enabled) -->
+    <div id="auth2faWrap" style="display:none">
+      <div class="auth-field">
+        <label>Enter your 6-digit authenticator code</label>
+        <input type="text" id="auth2faCode" placeholder="000000" maxlength="6" autocomplete="one-time-code" style="letter-spacing:6px;font-size:20px;text-align:center"/>
+      </div>
+      <div class="auth-error" id="auth2faError"></div>
+      <button class="auth-submit" onclick="handle2faLogin()">Verify</button>
+    </div>
+
+    <!-- 2FA setup step (shown from account menu) -->
+    <div id="auth2faSetupWrap" style="display:none">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):</p>
+      <div class="tfa-qr" id="tfaQr"></div>
+      <div class="tfa-secret" id="tfaSecret"></div>
+      <div class="auth-field" style="margin-top:14px">
+        <label>Enter the 6-digit code to confirm</label>
+        <input type="text" id="tfaConfirmCode" placeholder="000000" maxlength="6" style="letter-spacing:6px;font-size:20px;text-align:center"/>
+      </div>
+      <div class="auth-error" id="tfaSetupError"></div>
+      <button class="auth-submit" onclick="handleEnable2fa()">Enable 2FA</button>
+    </div>
+  </div>
+</div>
+
 <!-- RANK CHART MODAL -->
 <div id="chartModal">
   <div id="chartBox">
@@ -259,7 +372,7 @@ async function clearAllSnapshots() {
 // ============================================================
 function updateStatusBar() {
   const count = Object.keys(allSnapshots).length;
-  document.getElementById('snapshotStatus').textContent = `${count} snapshot${count!==1?'s':''} in DB`;
+  document.getElementById('snapshotStatus').textContent = `${count} Snapshot${count !== 1 ? 's' : ''}`;
 }
 
 // ============================================================
@@ -703,12 +816,213 @@ document.querySelectorAll('#movers-subtabs .subtab-btn').forEach(btn => {
   });
 });
 
-document.getElementById('clearSnapshots').addEventListener('click', clearAllSnapshots);
-
-// Close modal on backdrop click
+// Close chart modal on backdrop click
 document.getElementById('chartModal').addEventListener('click', e => {
   if (e.target === document.getElementById('chartModal')) closeChart();
 });
+
+// Close snapshot dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.snapshot-wrap')) {
+    document.getElementById('snapshotDropdown').classList.remove('open');
+  }
+});
+
+// ============================================================
+// SNAPSHOT DROPDOWN
+// ============================================================
+function toggleSnapshotDropdown() {
+  const dd = document.getElementById('snapshotDropdown');
+  dd.classList.toggle('open');
+  if (dd.classList.contains('open')) renderSnapshotDropdown();
+}
+
+function renderSnapshotDropdown() {
+  const dd = document.getElementById('snapshotDropdown');
+  const dates = snapshotDates();
+  if (!dates.length) {
+    dd.innerHTML = '<div class="snapshot-date-item" style="color:var(--muted)">No snapshots yet</div>';
+    return;
+  }
+  dd.innerHTML = [...dates].reverse().map(d =>
+    `<div class="snapshot-date-item">${d.slice(0,10)}</div>`
+  ).join('');
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+let _authTab = 'login';
+let _currentUser = null;
+
+async function checkAuth() {
+  const res = await fetch('/auth/me');
+  const data = await res.json();
+  _currentUser = data.loggedIn ? data : null;
+  updateUserUI();
+  if (!data.loggedIn) {
+    showAuthModal('login');
+  } else {
+    await loadSnapshots();
+    const dates = snapshotDates();
+    if (dates.length) {
+      const latestKey = dates[dates.length - 1];
+      currentCoins = expandSnapshot(latestKey);
+      renderAll();
+    }
+  }
+}
+
+function updateUserUI() {
+  const el = document.getElementById('siteUser');
+  if (_currentUser) {
+    el.innerHTML = `
+      <span class="site-user-email">${esc(_currentUser.email)}</span>
+      ${!_currentUser.has2fa ? `<button class="btn-outline" onclick="showSetup2fa()">Enable 2FA</button>` : '<span style="font-size:12px;color:#86efac">2FA ✓</span>'}
+      <button class="btn-outline" onclick="handleLogout()">Log Out</button>`;
+  } else {
+    el.innerHTML = `
+      <button class="btn-outline accent" onclick="showAuthModal('login')">Log In</button>
+      <button class="btn-outline" onclick="showAuthModal('signup')">Sign Up</button>`;
+  }
+}
+
+function showAuthModal(tab = 'login') {
+  switchAuthTab(tab);
+  document.getElementById('authModal').classList.add('open');
+  document.getElementById('auth2faWrap').style.display = 'none';
+  document.getElementById('auth2faSetupWrap').style.display = 'none';
+  document.getElementById('authFormWrap').style.display = '';
+  document.getElementById('authTabs').style.display = '';
+  document.getElementById('authError').textContent = '';
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+  setTimeout(() => document.getElementById('authEmail').focus(), 50);
+}
+
+function closeAuthModal() {
+  document.getElementById('authModal').classList.remove('open');
+}
+
+function switchAuthTab(tab) {
+  _authTab = tab;
+  document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+  document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
+  document.getElementById('authSubmit').textContent = tab === 'login' ? 'Log In' : 'Create Account';
+  document.getElementById('authSub').textContent = tab === 'login' ? 'Sign in to your account' : 'Create a free account';
+  document.getElementById('authSwitch').innerHTML = tab === 'login'
+    ? `Don't have an account? <a onclick="switchAuthTab('signup')">Sign up</a>`
+    : `Already have an account? <a onclick="switchAuthTab('login')">Log in</a>`;
+  document.getElementById('authError').textContent = '';
+}
+
+async function handleAuthSubmit() {
+  const email    = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const errEl    = document.getElementById('authError');
+  const btn      = document.getElementById('authSubmit');
+  errEl.textContent = '';
+  btn.disabled = true;
+  try {
+    const res  = await fetch(_authTab === 'login' ? '/auth/login' : '/auth/signup', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Error'; return; }
+    if (data.requires2fa) {
+      document.getElementById('authFormWrap').style.display = 'none';
+      document.getElementById('authTabs').style.display = 'none';
+      document.getElementById('authSub').textContent = 'Enter your authenticator code';
+      document.getElementById('auth2faWrap').style.display = '';
+      document.getElementById('auth2faCode').value = '';
+      document.getElementById('auth2faCode').focus();
+      return;
+    }
+    _currentUser = { email: data.email, has2fa: data.has2fa || false };
+    closeAuthModal();
+    updateUserUI();
+    await loadSnapshots();
+    const dates = snapshotDates();
+    if (dates.length) { currentCoins = expandSnapshot(dates[dates.length-1]); renderAll(); }
+    toast(`Welcome, ${data.email}!`, 'ok');
+  } catch(e) {
+    errEl.textContent = 'Network error — please try again.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function handle2faLogin() {
+  const code  = document.getElementById('auth2faCode').value.trim();
+  const errEl = document.getElementById('auth2faError');
+  errEl.textContent = '';
+  const res  = await fetch('/auth/verify-2fa-login', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ code })
+  });
+  const data = await res.json();
+  if (!res.ok) { errEl.textContent = data.error || 'Invalid code'; return; }
+  _currentUser = { email: data.email, has2fa: true };
+  closeAuthModal();
+  updateUserUI();
+  await loadSnapshots();
+  const dates = snapshotDates();
+  if (dates.length) { currentCoins = expandSnapshot(dates[dates.length-1]); renderAll(); }
+  toast(`Welcome back, ${data.email}!`, 'ok');
+}
+
+async function handleLogout() {
+  await fetch('/auth/logout', { method: 'POST' });
+  _currentUser = null;
+  allSnapshots = {};
+  currentCoins = null;
+  updateUserUI();
+  updateStatusBar();
+  renderAll();
+  showAuthModal('login');
+}
+
+async function showSetup2fa() {
+  const res  = await fetch('/auth/setup-2fa', { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) { toast(data.error || 'Error setting up 2FA', 'err'); return; }
+  document.getElementById('authFormWrap').style.display = 'none';
+  document.getElementById('authTabs').style.display = 'none';
+  document.getElementById('authSub').textContent = 'Set up two-factor authentication';
+  document.getElementById('auth2faSetupWrap').style.display = '';
+  document.getElementById('tfaSecret').textContent = data.secret;
+  document.getElementById('tfaSetupError').textContent = '';
+  document.getElementById('tfaConfirmCode').value = '';
+  // Render QR code
+  const qrDiv = document.getElementById('tfaQr');
+  qrDiv.innerHTML = '';
+  new QRCode(qrDiv, { text: data.uri, width: 160, height: 160, colorDark: '#1f2328', colorLight: '#ffffff' });
+  document.getElementById('authModal').classList.add('open');
+}
+
+async function handleEnable2fa() {
+  const code  = document.getElementById('tfaConfirmCode').value.trim();
+  const errEl = document.getElementById('tfaSetupError');
+  errEl.textContent = '';
+  const res  = await fetch('/auth/enable-2fa', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ code })
+  });
+  const data = await res.json();
+  if (!res.ok) { errEl.textContent = data.error || 'Invalid code'; return; }
+  _currentUser.has2fa = true;
+  closeAuthModal();
+  updateUserUI();
+  toast('2FA enabled successfully!', 'ok');
+}
+
+// Allow Enter key in auth inputs
+['authEmail','authPassword'].forEach(id => {
+  document.getElementById(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') handleAuthSubmit(); });
+});
+document.getElementById('auth2faCode')?.addEventListener('keydown', e => { if (e.key === 'Enter') handle2faLogin(); });
+document.getElementById('tfaConfirmCode')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleEnable2fa(); });
 
 // ============================================================
 // RANK CHART
@@ -983,19 +1297,7 @@ function drawRankChart(canvas, points) {
 // ============================================================
 // INIT
 // ============================================================
-(async () => {
-  await loadSnapshots();
-  const dates = snapshotDates();
-  if (dates.length) {
-    const latestKey = dates[dates.length - 1];
-    const latestCoins = expandSnapshot(latestKey);
-    currentCoins = latestCoins;
-    const chip = document.getElementById('dataStatus');
-    chip.textContent = `${currentCoins.length} coins from ${latestKey.slice(0,10)} (cached — click Fetch to refresh)`;
-    chip.className = 'status-chip warn';
-    renderAll();
-  }
-})();
+checkAuth();
 </script>
 </body>
 </html>
