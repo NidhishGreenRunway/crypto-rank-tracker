@@ -1530,7 +1530,13 @@ function renderFavorites() {
   const liveMap = {};
   (currentCoins || []).forEach(c => { liveMap[c.id] = c; });
 
-  const rows = wl.coins.map(c => {
+  const coinsOrdered = [...wl.coins].sort((a, b) => {
+    const ra = liveMap[a.coin_id]?.rank ?? 9999;
+    const rb = liveMap[b.coin_id]?.rank ?? 9999;
+    return ra - rb;
+  });
+
+  const rows = coinsOrdered.map(c => {
     const live = liveMap[c.coin_id] || {};
     const rank = live.rank ? `<span class="rank-badge">#${live.rank}</span>` : '<span class="change-none">—</span>';
     const price = live.price != null ? '$' + live.price.toLocaleString(undefined,{maximumFractionDigits:6}) : '—';
@@ -1547,14 +1553,14 @@ function renderFavorites() {
       <td style="color:var(--text);font-variant-numeric:tabular-nums">${price}</td>
       <td>${ch}</td>
       <td>${linkCell(coinObj)}</td>
-      <td><button class="btn secondary" style="padding:4px 8px;font-size:11px" onclick="removeFromWl(${wl.id},'${c.coin_id.replace(/'/g,"\\'")}')">✕ Remove</button></td>
+      <td style="text-align:center"><button class="fav-btn" style="color:var(--red);font-size:17px" onclick="removeFromWl(${wl.id},'${c.coin_id.replace(/'/g,"\\'")}')}" title="Remove">🗑</button></td>
     </tr>`;
   }).join('');
 
   el.innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Rank</th><th>Coin</th><th>Price</th><th>24h %</th><th>Links</th><th></th></tr></thead>
+        <thead><tr><th>Rank</th><th>Coin</th><th>Price</th><th>24h %</th><th>Links</th><th>Remove</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
